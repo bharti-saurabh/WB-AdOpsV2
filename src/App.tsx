@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -45,7 +45,7 @@ type ReviewDecision = 'approved' | 'rejected'
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 
-const PIE_COLORS = ['#1bc7ff', '#6f84ff', '#ff5d96', '#ffc156', '#55e4a8']
+const PIE_COLORS = ['#FF5800', '#FF8C42', '#FFB347', '#22c55e', '#9EA3B0']
 const numberFmt  = new Intl.NumberFormat('en-US')
 const compactFmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -215,7 +215,7 @@ EOF`,
 // ─── TABLE CATALOG ──────────────────────────────────────────────────────────
 
 const TABLE_CATALOG = [
-  { name: 'advertisers', file: 'advertisers.csv', color: '#4472ff',
+  { name: 'advertisers', file: 'advertisers.csv', color: '#FF5800',
     description: 'Brand accounts purchasing ad inventory across Warner networks.',
     columns: [
       { name: 'advertiser_id', type: 'STRING', pk: true,  fk: false },
@@ -223,21 +223,21 @@ const TABLE_CATALOG = [
       { name: 'industry',      type: 'STRING', pk: false, fk: false },
       { name: 'tier',          type: 'STRING', pk: false, fk: false },
     ]},
-  { name: 'agencies', file: 'agencies.csv', color: '#4472ff',
+  { name: 'agencies', file: 'agencies.csv', color: '#FF5800',
     description: 'Media buying agencies placing orders on behalf of advertisers.',
     columns: [
       { name: 'agency_id',     type: 'STRING', pk: true,  fk: false },
       { name: 'name',          type: 'STRING', pk: false, fk: false },
       { name: 'contact_email', type: 'STRING', pk: false, fk: false },
     ]},
-  { name: 'platforms', file: 'platforms.csv', color: '#4472ff',
+  { name: 'platforms', file: 'platforms.csv', color: '#FF5800',
     description: 'Ad delivery platforms — Streaming (HBO Max, CNN+) and Linear (TNT, TBS, truTV).',
     columns: [
       { name: 'platform_id',   type: 'STRING', pk: true,  fk: false },
       { name: 'platform_name', type: 'STRING', pk: false, fk: false },
       { name: 'platform_type', type: 'STRING', pk: false, fk: false },
     ]},
-  { name: 'audience_segments', file: 'audience_segments.csv', color: '#4472ff',
+  { name: 'audience_segments', file: 'audience_segments.csv', color: '#FF5800',
     description: 'DMP-sourced audience targeting segments used in campaign targeting.',
     columns: [
       { name: 'segment_id',   type: 'STRING', pk: true,  fk: false },
@@ -245,7 +245,7 @@ const TABLE_CATALOG = [
       { name: 'provider',     type: 'STRING', pk: false, fk: false },
       { name: 'sync_status',  type: 'STRING', pk: false, fk: false },
     ]},
-  { name: 'campaigns', file: 'campaigns.csv', color: '#9333ea',
+  { name: 'campaigns', file: 'campaigns.csv', color: '#FF8C42',
     description: 'Central fact table linking advertisers, agencies, platforms, and segments.',
     columns: [
       { name: 'campaign_id',        type: 'STRING', pk: true,  fk: false },
@@ -291,7 +291,7 @@ const TABLE_CATALOG = [
       { name: 'revenue_impact_usd',    type: 'FLOAT',    pk: false, fk: false },
       { name: 'status',                type: 'STRING',   pk: false, fk: false },
     ]},
-  { name: 'kpi_summary', file: 'kpi_summary.csv', color: '#06b6d4',
+  { name: 'kpi_summary', file: 'kpi_summary.csv', color: '#9EA3B0',
     description: 'Pre-aggregated KPI snapshot. Materialized view of key system metrics.',
     columns: [
       { name: 'kpi_name', type: 'STRING',   pk: false, fk: false },
@@ -316,13 +316,13 @@ type ErNode = { name: string; cx: number; cy: number; color: string; standalone?
 type ErLine = { d: string; label: string; lx: number; ly: number }
 
 const ER_NODES: ErNode[] = [
-  { name: 'advertisers',       cx: 130, cy: 70,  color: '#4472ff', cols: [['PK','advertiser_id'],['','name'],['','industry'],['','tier']] },
-  { name: 'agencies',          cx: 130, cy: 250, color: '#4472ff', cols: [['PK','agency_id'],['','name'],['','contact_email']] },
-  { name: 'audience_segments', cx: 130, cy: 430, color: '#4472ff', cols: [['PK','segment_id'],['','segment_name'],['','provider'],['','sync_status']] },
-  { name: 'kpi_summary',       cx: 460, cy: 70,  color: '#06b6d4', standalone: true, cols: [['','kpi_name'],['','value'],['','unit'],['','as_of']] },
-  { name: 'campaigns',         cx: 460, cy: 255, color: '#9333ea', cols: [['PK','campaign_id'],['FK','advertiser_id'],['FK','agency_id'],['FK','platform_id'],['FK','segment_id'],['','status'],['','cpm_usd']] },
+  { name: 'advertisers',       cx: 130, cy: 70,  color: '#FF5800', cols: [['PK','advertiser_id'],['','name'],['','industry'],['','tier']] },
+  { name: 'agencies',          cx: 130, cy: 250, color: '#FF5800', cols: [['PK','agency_id'],['','name'],['','contact_email']] },
+  { name: 'audience_segments', cx: 130, cy: 430, color: '#FF5800', cols: [['PK','segment_id'],['','segment_name'],['','provider'],['','sync_status']] },
+  { name: 'kpi_summary',       cx: 460, cy: 70,  color: '#9EA3B0', standalone: true, cols: [['','kpi_name'],['','value'],['','unit'],['','as_of']] },
+  { name: 'campaigns',         cx: 460, cy: 255, color: '#FF8C42', cols: [['PK','campaign_id'],['FK','advertiser_id'],['FK','agency_id'],['FK','platform_id'],['FK','segment_id'],['','status'],['','cpm_usd']] },
   { name: 'alerts',            cx: 460, cy: 440, color: '#ef4444', cols: [['PK','alert_id'],['FK','campaign_id'],['','severity'],['','alert_type'],['','revenue_impact_usd']] },
-  { name: 'platforms',         cx: 790, cy: 70,  color: '#4472ff', cols: [['PK','platform_id'],['','platform_name'],['','platform_type']] },
+  { name: 'platforms',         cx: 790, cy: 70,  color: '#FF5800', cols: [['PK','platform_id'],['','platform_name'],['','platform_type']] },
   { name: 'creatives',         cx: 790, cy: 250, color: '#f59e0b', cols: [['PK','creative_id'],['FK','campaign_id'],['','creative_name'],['','format'],['','bitrate_kbps']] },
   { name: 'performance_log',   cx: 790, cy: 430, color: '#22c55e', cols: [['FK','campaign_id'],['','log_hour'],['','impressions_delivered'],['','vast_requests'],['','video_completes']] },
 ]
@@ -371,9 +371,9 @@ function getSeverityWeight(s: string) {
 }
 
 function healthColor(rate: number) {
-  if (rate >= 90) return '#38d9b2'
-  if (rate >= 75) return '#ffc156'
-  return '#ff7a8a'
+  if (rate >= 90) return '#22c55e'
+  if (rate >= 75) return '#f59e0b'
+  return '#ef4444'
 }
 
 function buildRca(a: EnrichedAlert) {
@@ -461,6 +461,16 @@ function loadPerformanceSample(url: string, every: number, ids: Set<string>): Pr
   })
 }
 
+function downloadCsv(filename: string) {
+  const url = `${import.meta.env.BASE_URL}data/${filename}`
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 // ─── APP ────────────────────────────────────────────────────────────────────
 
 function App() {
@@ -486,6 +496,14 @@ function App() {
   const [rejectReason, setRejectReason]   = useState<Record<string, string>>({})
   // Old RCA panel (from overview alerts click)
   const [selectedAlert, setSelectedAlert] = useState<EnrichedAlert | null>(null)
+
+  // Data explorer preview
+  const [previewTable, setPreviewTable] = useState<string | null>(null)
+  // Intelligence feed selected alert type
+  const [intelSelectedType, setIntelSelectedType] = useState<string | null>(null)
+  // Notifications agent state per alert
+  const [agentState, setAgentState] = useState<Record<string, 'idle' | 'running' | 'complete'>>({})
+  const [agentStep, setAgentStep] = useState<Record<string, number>>({})
 
   useEffect(() => {
     const load = async () => {
@@ -640,6 +658,66 @@ function App() {
       .slice(0, 6)
   }, [enrichedAlerts])
 
+  // ── Unique alert types for Intel Feed
+  const uniqueAlertTypes = useMemo(() => {
+    const map = new Map<string, { type: string; count: number; revenue: number; topSeverity: string }>()
+    for (const a of enrichedAlerts) {
+      const existing = map.get(a.alert_type)
+      if (!existing) {
+        map.set(a.alert_type, { type: a.alert_type, count: 1, revenue: Number(a.revenue_impact_usd), topSeverity: a.severity })
+      } else {
+        existing.count++
+        existing.revenue += Number(a.revenue_impact_usd)
+        if (getSeverityWeight(a.severity) < getSeverityWeight(existing.topSeverity)) {
+          existing.topSeverity = a.severity
+        }
+      }
+    }
+    return [...map.values()].sort((a, b) => b.revenue - a.revenue)
+  }, [enrichedAlerts])
+
+  // ── Selected intel alert (representative from the chosen type)
+  const selectedIntelAlert = useMemo(() => {
+    if (!intelSelectedType) return null
+    return agentSessions.find((a) => a.alert_type === intelSelectedType) ??
+      enrichedAlerts.find((a) => a.alert_type === intelSelectedType && AGENT_PLAYBOOK[a.alert_type]) ?? null
+  }, [intelSelectedType, agentSessions, enrichedAlerts])
+
+  // ── Auto-select highest revenue alert type on intel tab
+  useEffect(() => {
+    if (activeTab === 'intel' && uniqueAlertTypes.length > 0 && !intelSelectedType) {
+      setIntelSelectedType(uniqueAlertTypes[0].type)
+    }
+  }, [activeTab, uniqueAlertTypes, intelSelectedType])
+
+  // ── Preview data helper
+  const getPreviewData = useCallback((tableName: string): Record<string, unknown>[] => {
+    const map: Record<string, Record<string, unknown>[]> = {
+      advertisers: advertisers as unknown as Record<string, unknown>[],
+      platforms: platforms as unknown as Record<string, unknown>[],
+      campaigns: campaigns.slice(0, 50) as unknown as Record<string, unknown>[],
+      alerts: alerts.slice(0, 50) as unknown as Record<string, unknown>[],
+      kpi_summary: kpis as unknown as Record<string, unknown>[],
+      performance_log: performance.slice(0, 50) as unknown as Record<string, unknown>[],
+    }
+    return map[tableName] ?? []
+  }, [advertisers, platforms, campaigns, alerts, kpis, performance])
+
+  // ── Agent trigger for notifications
+  const triggerAgentAnalysis = useCallback((alertId: string, playbook: typeof AGENT_PLAYBOOK[string]) => {
+    setAgentState(p => ({ ...p, [alertId]: 'running' }))
+    setAgentStep(p => ({ ...p, [alertId]: 0 }))
+    setExpandedAlert(alertId)
+    playbook.steps.forEach((_, i) => {
+      setTimeout(() => {
+        setAgentStep(p => ({ ...p, [alertId]: i + 1 }))
+        if (i === playbook.steps.length - 1) {
+          setTimeout(() => setAgentState(p => ({ ...p, [alertId]: 'complete' })), 600)
+        }
+      }, (i + 1) * 900)
+    })
+  }, [])
+
   // Count-up animated values — must be before any early return (Rules of Hooks)
   const countCampaigns = useCountUp(loading ? 0 : topMetrics.activeCampaigns)
   const countAlerts    = useCountUp(loading ? 0 : topMetrics.activeAlerts)
@@ -673,6 +751,9 @@ function App() {
   enrichedAlerts.forEach((a) => { const t = alertTypeTotals.find((x) => x.type === a.alert_type); if (t) { t.count++; t.revenue += Number(a.revenue_impact_usd) } })
   const topRevenueAlerts = [...enrichedAlerts].sort((a, b) => Number(b.revenue_impact_usd) - Number(a.revenue_impact_usd)).slice(0, 8)
 
+  // ── Unread badge count
+  const unreadCount = enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length
+
   return (
     <div className="app-shell">
       {/* ── ANIMATED BACKGROUND ── */}
@@ -695,16 +776,22 @@ function App() {
           </div>
         </div>
         <nav className="tabs">
-          <button className={`tab ${activeTab === 'overview' ? 'active' : ''}`}      onClick={() => setActiveTab('overview')}><LayoutDashboard size={14} /> Overview</button>
-          <button className={`tab ${activeTab === 'health' ? 'active' : ''}`}        onClick={() => setActiveTab('health')}><Activity size={14} /> Campaign Health</button>
-          <button className={`tab ${activeTab === 'intel' ? 'active' : ''}`}         onClick={() => setActiveTab('intel')}><Bot size={14} /> Intelligence Feed</button>
+          <button className={`tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}>
+            <LayoutDashboard size={14} /> Overview
+          </button>
           <button className={`tab ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
             <Bell size={14} /> Notifications
-            {enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length > 0 && (
-              <span className="notif-badge">{enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length}</span>
-            )}
+            {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
           </button>
-          <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`}      onClick={() => setActiveTab('explorer')}><Database size={14} /> Data Explorer</button>
+          <button className={`tab ${activeTab === 'health' ? 'active' : ''}`} onClick={() => setActiveTab('health')}>
+            <Activity size={14} /> Campaign Health
+          </button>
+          <button className={`tab ${activeTab === 'intel' ? 'active' : ''}`} onClick={() => setActiveTab('intel')}>
+            <Bot size={14} /> Intelligence Feed
+          </button>
+          <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}>
+            <Database size={14} /> Data Explorer
+          </button>
         </nav>
         <div className="status-pill">
           <span className="live-dot" />
@@ -718,19 +805,19 @@ function App() {
       {activeTab === 'overview' && (
       <main key="overview" className="content-grid tab-content">
         <section className="metric-grid">
-          <article className="metric-card clickable" style={{ '--accent': '#4f7cff' } as React.CSSProperties} onClick={() => setDrilldown('campaigns')}>
+          <article className="metric-card clickable" style={{ '--accent': '#FF5800' } as React.CSSProperties} onClick={() => setDrilldown('campaigns')}>
             <div className="metric-head">
               <span>Active Campaigns</span>
-              <div className="metric-icon" style={{ background: 'rgba(79,124,255,0.12)', color: '#4f7cff' }}><TrendingUp size={15} /></div>
+              <div className="metric-icon" style={{ background: 'rgba(255,88,0,0.12)', color: '#FF5800' }}><TrendingUp size={15} /></div>
             </div>
             <h2>{numberFmt.format(countCampaigns)}</h2>
             <p className="positive">Live across Streaming + Linear</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
-          <article className="metric-card clickable" style={{ '--accent': '#00d4ff' } as React.CSSProperties} onClick={() => setDrilldown('delivery')}>
+          <article className="metric-card clickable" style={{ '--accent': '#FF8C42' } as React.CSSProperties} onClick={() => setDrilldown('delivery')}>
             <div className="metric-head">
               <span>Average Delivery Rate</span>
-              <div className="metric-icon" style={{ background: 'rgba(0,212,255,0.10)', color: '#00d4ff' }}><MonitorPlay size={15} /></div>
+              <div className="metric-icon" style={{ background: 'rgba(255,140,66,0.10)', color: '#FF8C42' }}><MonitorPlay size={15} /></div>
             </div>
             <h2>{topMetrics.avgDeliveryRate.toFixed(1)}<span className="metric-unit">%</span></h2>
             <p className={topMetrics.avgDeliveryRate >= 90 ? 'positive' : 'negative'}>
@@ -738,19 +825,19 @@ function App() {
             </p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
-          <article className="metric-card clickable" style={{ '--accent': '#ff5d7e' } as React.CSSProperties} onClick={() => setDrilldown('alerts')}>
+          <article className="metric-card clickable" style={{ '--accent': '#ef4444' } as React.CSSProperties} onClick={() => setDrilldown('alerts')}>
             <div className="metric-head">
               <span>Active Alerts</span>
-              <div className="metric-icon" style={{ background: 'rgba(255,93,126,0.12)', color: '#ff5d7e' }}><ShieldAlert size={15} /></div>
+              <div className="metric-icon" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}><ShieldAlert size={15} /></div>
             </div>
             <h2>{numberFmt.format(countAlerts)}</h2>
             <p className="negative">Critical issues requiring intervention</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
-          <article className="metric-card clickable" style={{ '--accent': '#ffc156' } as React.CSSProperties} onClick={() => setDrilldown('revenue')}>
+          <article className="metric-card clickable" style={{ '--accent': '#f59e0b' } as React.CSSProperties} onClick={() => setDrilldown('revenue')}>
             <div className="metric-head">
               <span>Revenue at Risk</span>
-              <div className="metric-icon" style={{ background: 'rgba(255,193,86,0.10)', color: '#ffc156' }}><CircleDollarSign size={15} /></div>
+              <div className="metric-icon" style={{ background: 'rgba(245,158,11,0.10)', color: '#f59e0b' }}><CircleDollarSign size={15} /></div>
             </div>
             <h2>{currencyFmt.format(countRevenue)}</h2>
             <p className="negative">Potentially lost from unresolved fallout</p>
@@ -778,17 +865,17 @@ function App() {
             <AreaChart data={pacingSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#6180ff" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#6180ff" stopOpacity={0.03} />
+                  <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.5} />
+                  <stop offset="95%" stopColor="#FF5800" stopOpacity={0.03} />
                 </linearGradient>
               </defs>
-              <CartesianGrid stroke="#243057" strokeDasharray="3 3" />
-              <XAxis dataKey="hour" stroke="#7f93c8" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#7f93c8" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 12 }}
+              <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" />
+              <XAxis dataKey="hour" stroke="#5A5F6E" tick={{ fontSize: 11 }} />
+              <YAxis stroke="#5A5F6E" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 12 }}
                 formatter={(v) => numberFmt.format(Number(v ?? 0))} />
-              <Area type="monotone" dataKey="target" stroke="#7f91b9" strokeDasharray="4 4" fill="none" name="Target" />
-              <Area type="monotone" dataKey="actual" stroke="#6583ff" fill="url(#actualFill)" name="Actual" />
+              <Area type="monotone" dataKey="target" stroke="#5A5F6E" strokeDasharray="4 4" fill="none" name="Target" />
+              <Area type="monotone" dataKey="actual" stroke="#FF5800" fill="url(#actualFill)" name="Actual" />
             </AreaChart>
           </ResponsiveContainer>
           <p className="chart-footnote">AI Insight: Delivery drops concentrated in linear prime-time windows; recovery expected after streaming spillover.</p>
@@ -804,7 +891,7 @@ function App() {
               <Pie data={falloutSeries} innerRadius={60} outerRadius={90} dataKey="value" nameKey="name" paddingAngle={2}>
                 {falloutSeries.map((e, i) => <Cell key={e.name} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
-              <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 12 }}
+              <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 12 }}
                 formatter={(v) => numberFmt.format(Number(v ?? 0))} />
             </PieChart>
           </ResponsiveContainer>
@@ -835,16 +922,212 @@ function App() {
       )}
 
       {/* ════════════════════════════════════════════════════════════════
+          NOTIFICATIONS TAB (2nd)
+      ════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'notifications' && (
+      <main key="notifications" className="notif-shell tab-content">
+        <div className="notif-header">
+          <div className="notif-title">
+            <Bell size={16} /> <strong>Alert Notifications</strong>
+            <span>{enrichedAlerts.length} open · {Object.values(reviewDecisions).filter((d) => d === 'approved').length} deployed · {Object.values(reviewDecisions).filter((d) => d === 'rejected').length} rejected</span>
+          </div>
+          <div className="notif-filters">
+            {['All', 'Critical', 'High', 'Medium', 'Warning'].map((f) => (
+              <button key={f} className={`filter-btn ${notifFilter === f ? 'active' : ''}`} onClick={() => setNotifFilter(f)} type="button">{f}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="notif-list">
+          {enrichedAlerts
+            .filter((a) => notifFilter === 'All' || a.severity === notifFilter)
+            .map((alert) => {
+              const pb  = AGENT_PLAYBOOK[alert.alert_type]
+              const dec = reviewDecisions[alert.alert_id]
+              const isOpen = expandedAlert === alert.alert_id
+              const rca = buildRca(alert)
+              const aState = agentState[alert.alert_id]
+              const aStep  = agentStep[alert.alert_id] ?? 0
+
+              return (
+                <div className={`notif-card ${dec ?? 'pending'}`} key={alert.alert_id}>
+                  {/* Collapsed header row — always visible */}
+                  <div className="notif-row-wrap">
+                    <button className="notif-row" type="button" onClick={() => {
+                      if (aState === 'complete' || aState === 'running') {
+                        setExpandedAlert(isOpen ? null : alert.alert_id)
+                      } else {
+                        setExpandedAlert(isOpen ? null : alert.alert_id)
+                      }
+                    }}>
+                      <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
+                      <div className="notif-info">
+                        <strong>{alert.alert_type}</strong>
+                        <span>{alert.campaign_name} · {alert.platform_name} · {alert.advertiser_name}</span>
+                        <p className="notif-trigger">{alert.trigger_value}</p>
+                      </div>
+                      <div className="notif-right">
+                        <span className="notif-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span>
+                        {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={11} /> Deployed</span>}
+                        {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={11} /> Rejected</span>}
+                        {!dec              && <span className="dec-badge pending"><Bot size={11} /> Pending</span>}
+                        {isOpen ? <ChevronDown size={14} className="notif-chevron open" /> : <ChevronRight size={14} className="notif-chevron" />}
+                      </div>
+                    </button>
+
+                    {/* Deep Dive button — shown when idle/not started and not decided */}
+                    {!dec && pb && (!aState || aState === 'idle') && (
+                      <button
+                        className="deep-dive-btn"
+                        type="button"
+                        onClick={() => triggerAgentAnalysis(alert.alert_id, pb)}
+                      >
+                        <Bot size={14} /> Deep Dive &amp; Resolve
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Agent working animation */}
+                  {aState === 'running' && (
+                    <div className="agent-working-panel">
+                      <div className="agent-working-head">
+                        <div className="agent-spinner"><Bot size={14} /></div>
+                        <span>Agent working… analyzing root cause</span>
+                      </div>
+                      <div className="agent-steps-live">
+                        {pb.steps.map((step, i) => (
+                          <div
+                            key={step.tool}
+                            className={`agent-step-live ${i < aStep ? 'done' : i === aStep ? 'active' : 'pending'}`}
+                          >
+                            <div className="asl-icon">
+                              {step.icon === 'search'   && <Search   size={11} />}
+                              {step.icon === 'database' && <Database size={11} />}
+                              {step.icon === 'terminal' && <Terminal size={11} />}
+                              {step.icon === 'activity' && <Activity size={11} />}
+                              {step.icon === 'zap'      && <Zap      size={11} />}
+                            </div>
+                            <div className="asl-body">
+                              <code>{step.tool}()</code>
+                              <span>{step.desc}</span>
+                              {i < aStep && <span className="asl-result">→ {step.result}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expanded detail — shown when complete or manually toggled */}
+                  {isOpen && (aState === 'complete' || !aState || aState === 'idle') && (
+                    <div className="notif-detail">
+                      {/* Agent steps */}
+                      {pb && (
+                        <div className="nd-section">
+                          <div className="nd-label"><Bot size={13} /> Agent Analysis Steps</div>
+                          <div className="agent-steps compact">
+                            {pb.steps.map((step, i) => (
+                              <div className={`agent-step step-anim-${i}`} key={step.tool}>
+                                <div className="step-icon">
+                                  {step.icon === 'search'   && <Search   size={11} />}
+                                  {step.icon === 'database' && <Database size={11} />}
+                                  {step.icon === 'terminal' && <Terminal size={11} />}
+                                  {step.icon === 'activity' && <Activity size={11} />}
+                                  {step.icon === 'zap'      && <Zap      size={11} />}
+                                </div>
+                                <div className="step-body">
+                                  <code className="step-tool">{step.tool}()</code>
+                                  <span className="step-desc">{step.desc}</span>
+                                  <span className="step-result">→ {step.result}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Root cause */}
+                      <div className={`nd-section ${aState === 'complete' ? 'fade-in-section' : ''}`}>
+                        <div className="nd-label"><Search size={13} /> Root Cause ({rca.confidence}% confidence)</div>
+                        <p>{pb?.rootCause ?? rca.recommendation}</p>
+                      </div>
+
+                      {/* System trace */}
+                      <div className="nd-section">
+                        <div className="nd-label"><Terminal size={13} /> System Trace</div>
+                        <pre className="notif-trace">{rca.trace.join('\n')}</pre>
+                      </div>
+
+                      {/* Fix artifact */}
+                      {pb && (
+                        <div className={`nd-section ${aState === 'complete' ? 'fade-in-section' : ''}`}>
+                          <div className="nd-label">
+                            <Zap size={13} /> Proposed Fix
+                            <span className="fix-type-badge">{pb.fixType}</span>
+                            <span className="fix-recovery">{pb.recoveryTime}</span>
+                          </div>
+                          <pre className="fix-code">{pb.fixCode}</pre>
+                        </div>
+                      )}
+
+                      {/* Revenue impact */}
+                      <div className="nd-section nd-impact">
+                        <div><span className="impact-label">Revenue at Risk</span><span className="impact-val">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span></div>
+                        <div><span className="impact-label">Impression Shortfall</span><span className="impact-val">{numberFmt.format(alert.expected_impressions - alert.actual_impressions)}</span></div>
+                        <div><span className="impact-label">Alert ID</span><span className="impact-val code">{alert.alert_id}</span></div>
+                      </div>
+
+                      {/* Actions */}
+                      {!dec && (
+                        <div className={`nd-actions ${aState === 'complete' ? 'fade-in-section' : ''}`}>
+                          <button className="btn-approve" type="button"
+                            onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
+                            <CheckCircle2 size={14} /> Approve &amp; Deploy
+                          </button>
+                          <div className="reject-group">
+                            <input
+                              className="reject-reason-input"
+                              placeholder="Rejection reason (optional)…"
+                              value={rejectReason[alert.alert_id] ?? ''}
+                              onChange={(e) => setRejectReason((p) => ({ ...p, [alert.alert_id]: e.target.value }))}
+                            />
+                            <button className="btn-reject" type="button"
+                              onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
+                              <XCircle size={14} /> Reject
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {dec === 'approved' && (
+                        <div className="nd-deployed">
+                          <CheckCircle2 size={15} /> Fix approved and queued for deployment.
+                        </div>
+                      )}
+                      {dec === 'rejected' && (
+                        <div className="nd-rejected">
+                          <XCircle size={15} /> Fix rejected.{rejectReason[alert.alert_id] ? ` Reason: ${rejectReason[alert.alert_id]}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+        </div>
+      </main>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
           CAMPAIGN HEALTH TAB
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'health' && (
       <main key="health" className="health-shell tab-content">
         <div className="health-summary">
           {[
-            { label: 'Healthy (≥90%)',  count: campaignHealth.filter((h) => h.deliveryRate >= 90).length, color: '#38d9b2' },
-            { label: 'At Risk (75–89%)', count: campaignHealth.filter((h) => h.deliveryRate >= 75 && h.deliveryRate < 90).length, color: '#ffc156' },
-            { label: 'Critical (<75%)', count: campaignHealth.filter((h) => h.deliveryRate < 75).length, color: '#ff7a8a' },
-            { label: 'With Open Alerts', count: campaignHealth.filter((h) => h.alertCount > 0).length, color: '#6f84ff' },
+            { label: 'Healthy (≥90%)',  count: campaignHealth.filter((h) => h.deliveryRate >= 90).length, color: '#22c55e' },
+            { label: 'At Risk (75–89%)', count: campaignHealth.filter((h) => h.deliveryRate >= 75 && h.deliveryRate < 90).length, color: '#f59e0b' },
+            { label: 'Critical (<75%)', count: campaignHealth.filter((h) => h.deliveryRate < 75).length, color: '#ef4444' },
+            { label: 'With Open Alerts', count: campaignHealth.filter((h) => h.alertCount > 0).length, color: '#FF5800' },
           ].map((s) => (
             <div className="health-stat" key={s.label}>
               <span className="health-stat-num" style={{ color: s.color }}>{s.count}</span>
@@ -879,13 +1162,13 @@ function App() {
                         <span style={{ color: healthColor(h.deliveryRate) }}>{h.deliveryRate.toFixed(1)}%</span>
                       </div>
                     </td>
-                    <td style={{ color: h.fillRate >= 95 ? '#38d9b2' : h.fillRate >= 80 ? '#ffc156' : '#ff7a8a' }}>{h.fillRate.toFixed(1)}%</td>
-                    <td style={{ color: h.vcr >= 70 ? '#38d9b2' : h.vcr >= 50 ? '#ffc156' : '#ff7a8a' }}>{h.vcr.toFixed(1)}%</td>
-                    <td style={{ color: h.errorRate < 3 ? '#38d9b2' : h.errorRate < 8 ? '#ffc156' : '#ff7a8a' }}>{h.errorRate.toFixed(2)}%</td>
+                    <td style={{ color: h.fillRate >= 95 ? '#22c55e' : h.fillRate >= 80 ? '#f59e0b' : '#ef4444' }}>{h.fillRate.toFixed(1)}%</td>
+                    <td style={{ color: h.vcr >= 70 ? '#22c55e' : h.vcr >= 50 ? '#f59e0b' : '#ef4444' }}>{h.vcr.toFixed(1)}%</td>
+                    <td style={{ color: h.errorRate < 3 ? '#22c55e' : h.errorRate < 8 ? '#f59e0b' : '#ef4444' }}>{h.errorRate.toFixed(2)}%</td>
                     <td>
                       {h.alertCount > 0
                         ? <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.alertCount} {h.topSeverity}</span>
-                        : <span className="no-alerts">✓ Clear</span>}
+                        : <span className="no-alerts">&#10003; Clear</span>}
                     </td>
                   </tr>
                 ))}
@@ -919,9 +1202,9 @@ function App() {
                 <div className="hd-kpis">
                   {[
                     { label: 'Delivery', val: `${h.deliveryRate.toFixed(1)}%`, color: healthColor(h.deliveryRate) },
-                    { label: 'Fill',     val: `${h.fillRate.toFixed(1)}%`,     color: h.fillRate >= 95 ? '#38d9b2' : '#ffc156' },
-                    { label: 'VCR',      val: `${h.vcr.toFixed(1)}%`,          color: h.vcr >= 70 ? '#38d9b2' : '#ffc156' },
-                    { label: 'Errors',   val: `${h.errorRate.toFixed(2)}%`,    color: h.errorRate < 3 ? '#38d9b2' : '#ff7a8a' },
+                    { label: 'Fill',     val: `${h.fillRate.toFixed(1)}%`,     color: h.fillRate >= 95 ? '#22c55e' : '#f59e0b' },
+                    { label: 'VCR',      val: `${h.vcr.toFixed(1)}%`,          color: h.vcr >= 70 ? '#22c55e' : '#f59e0b' },
+                    { label: 'Errors',   val: `${h.errorRate.toFixed(2)}%`,    color: h.errorRate < 3 ? '#22c55e' : '#ef4444' },
                   ].map((k) => (
                     <div className="hd-kpi" key={k.label}>
                       <span style={{ color: k.color }}>{k.val}</span>
@@ -934,16 +1217,16 @@ function App() {
                   <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="hdFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#6180ff" stopOpacity={0.5} />
-                        <stop offset="95%" stopColor="#6180ff" stopOpacity={0.03} />
+                        <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.5} />
+                        <stop offset="95%" stopColor="#FF5800" stopOpacity={0.03} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="#1a2848" strokeDasharray="3 3" />
-                    <XAxis dataKey="hour" stroke="#4a6494" tick={{ fontSize: 9 }} />
-                    <YAxis stroke="#4a6494" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 9 }} />
-                    <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 8, fontSize: 11 }}
+                    <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" />
+                    <XAxis dataKey="hour" stroke="#5A5F6E" tick={{ fontSize: 9 }} />
+                    <YAxis stroke="#5A5F6E" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 9 }} />
+                    <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 8, fontSize: 11 }}
                       formatter={(v) => numberFmt.format(Number(v ?? 0))} />
-                    <Area type="monotone" dataKey="delivered" stroke="#6583ff" fill="url(#hdFill)" name="Delivered" />
+                    <Area type="monotone" dataKey="delivered" stroke="#FF5800" fill="url(#hdFill)" name="Delivered" />
                   </AreaChart>
                 </ResponsiveContainer>
                 {campAlerts.length > 0 && (
@@ -1000,222 +1283,107 @@ function App() {
           </div>
         </section>
 
-        {/* Agent sessions */}
-        <div className="intel-sessions">
-          {agentSessions.map((alert) => {
-            const pb    = AGENT_PLAYBOOK[alert.alert_type]
-            const dec   = reviewDecisions[alert.alert_id]
-            if (!pb) return null
-            return (
-              <div className={`session-card ${dec ?? ''}`} key={alert.alert_id}>
-                <div className="session-head">
-                  <div className="session-meta">
-                    <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
-                    <strong>{alert.alert_type}</strong>
-                    <span className="session-sub">{alert.campaign_name} · {alert.platform_name}</span>
-                  </div>
-                  <div className="session-right">
-                    <span className="session-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))} at risk</span>
-                    {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={12} /> Approved &amp; Deployed</span>}
-                    {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={12} /> Rejected</span>}
-                    {!dec              && <span className="dec-badge pending"><Bot size={12} /> Awaiting Review</span>}
-                  </div>
+        {/* Intel layout: sidebar + main */}
+        <div className="intel-layout">
+          {/* Left: alert type selector */}
+          <aside className="intel-sidebar">
+            <div className="intel-sidebar-head"><Bot size={14} /> Select Alert Type</div>
+            {uniqueAlertTypes.map(({ type, count, revenue, topSeverity }) => (
+              <button
+                key={type}
+                className={`intel-type-btn ${intelSelectedType === type ? 'active' : ''}`}
+                onClick={() => setIntelSelectedType(type)}
+                type="button"
+              >
+                <span className={`severity-pill ${topSeverity.toLowerCase()}`}>{topSeverity}</span>
+                <div className="intel-type-info">
+                  <strong>{type}</strong>
+                  <span>{count} alerts · {currencyFmt.format(revenue)}</span>
                 </div>
-
-                {/* Agent steps */}
-                <div className="agent-steps">
-                  {pb.steps.map((step, i) => (
-                    <div className={`agent-step step-anim-${i}`} key={step.tool}>
-                      <div className="step-icon">
-                        {step.icon === 'search'   && <Search   size={12} />}
-                        {step.icon === 'database' && <Database size={12} />}
-                        {step.icon === 'terminal' && <Terminal size={12} />}
-                        {step.icon === 'activity' && <Activity size={12} />}
-                        {step.icon === 'zap'      && <Zap      size={12} />}
-                      </div>
-                      <div className="step-body">
-                        <code className="step-tool">{step.tool}()</code>
-                        <span className="step-desc">{step.desc}</span>
-                        <span className="step-result">→ {step.result}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Root cause */}
-                <div className="session-rca">
-                  <div className="rca-label"><Bot size={12} /> Root Cause</div>
-                  <p>{pb.rootCause}</p>
-                  <div className="confidence">Confidence: <strong>{buildRca(alert).confidence}%</strong></div>
-                </div>
-
-                {/* Fix artifact */}
-                <div className="session-fix">
-                  <div className="fix-head">
-                    <Terminal size={12} /> <span>Proposed Fix</span>
-                    <span className="fix-type-badge">{pb.fixType}</span>
-                    <span className="fix-recovery">Est. recovery: {pb.recoveryTime}</span>
-                  </div>
-                  <pre className="fix-code">{pb.fixCode}</pre>
-                </div>
-
-                {/* Actions */}
-                {!dec && (
-                  <div className="session-actions">
-                    <button className="btn-approve" type="button"
-                      onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
-                      <CheckCircle2 size={14} /> Approve &amp; Deploy
-                    </button>
-                    <button className="btn-reject" type="button"
-                      onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
-                      <XCircle size={14} /> Reject
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </main>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════
-          NOTIFICATIONS TAB
-      ════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'notifications' && (
-      <main key="notifications" className="notif-shell tab-content">
-        <div className="notif-header">
-          <div className="notif-title">
-            <Bell size={16} /> <strong>Alert Notifications</strong>
-            <span>{enrichedAlerts.length} open · {Object.values(reviewDecisions).filter((d) => d === 'approved').length} deployed · {Object.values(reviewDecisions).filter((d) => d === 'rejected').length} rejected</span>
-          </div>
-          <div className="notif-filters">
-            {['All', 'Critical', 'High', 'Medium', 'Warning'].map((f) => (
-              <button key={f} className={`filter-btn ${notifFilter === f ? 'active' : ''}`} onClick={() => setNotifFilter(f)} type="button">{f}</button>
+                <ChevronRight size={12} />
+              </button>
             ))}
-          </div>
-        </div>
+          </aside>
 
-        <div className="notif-list">
-          {enrichedAlerts
-            .filter((a) => notifFilter === 'All' || a.severity === notifFilter)
-            .map((alert) => {
-              const pb  = AGENT_PLAYBOOK[alert.alert_type]
-              const dec = reviewDecisions[alert.alert_id]
-              const isOpen = expandedAlert === alert.alert_id
-              const rca = buildRca(alert)
+          {/* Right: analysis panel */}
+          <div className="intel-main">
+            {selectedIntelAlert ? (() => {
+              const alert = selectedIntelAlert
+              const pb    = AGENT_PLAYBOOK[alert.alert_type]
+              const dec   = reviewDecisions[alert.alert_id]
+              if (!pb) return <div className="intel-empty">No agent playbook available for this alert type.</div>
               return (
-                <div className={`notif-card ${dec ?? 'pending'}`} key={alert.alert_id}>
-                  <button className="notif-row" type="button" onClick={() => setExpandedAlert(isOpen ? null : alert.alert_id)}>
-                    <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
-                    <div className="notif-info">
+                <div className={`session-card ${dec ?? ''}`}>
+                  <div className="session-head">
+                    <div className="session-meta">
+                      <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
                       <strong>{alert.alert_type}</strong>
-                      <span>{alert.campaign_name} · {alert.platform_name} · {alert.advertiser_name}</span>
-                      <p>{alert.trigger_value}</p>
+                      <span className="session-sub">{alert.campaign_name} · {alert.platform_name}</span>
                     </div>
-                    <div className="notif-right">
-                      <span className="notif-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span>
-                      {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={11} /> Deployed</span>}
-                      {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={11} /> Rejected</span>}
-                      {!dec              && <span className="dec-badge pending"><Bot size={11} /> Pending</span>}
-                      {isOpen ? <ChevronDown size={14} className="notif-chevron open" /> : <ChevronRight size={14} className="notif-chevron" />}
+                    <div className="session-right">
+                      <span className="session-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))} at risk</span>
+                      {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={12} /> Approved &amp; Deployed</span>}
+                      {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={12} /> Rejected</span>}
+                      {!dec              && <span className="dec-badge pending"><Bot size={12} /> Awaiting Review</span>}
                     </div>
-                  </button>
+                  </div>
 
-                  {isOpen && (
-                    <div className="notif-detail">
-                      {/* Agent steps */}
-                      {pb && (
-                        <div className="nd-section">
-                          <div className="nd-label"><Bot size={13} /> Agent Analysis Steps</div>
-                          <div className="agent-steps compact">
-                            {pb.steps.map((step, i) => (
-                              <div className={`agent-step step-anim-${i}`} key={step.tool}>
-                                <div className="step-icon">
-                                  {step.icon === 'search'   && <Search   size={11} />}
-                                  {step.icon === 'database' && <Database size={11} />}
-                                  {step.icon === 'terminal' && <Terminal size={11} />}
-                                  {step.icon === 'activity' && <Activity size={11} />}
-                                  {step.icon === 'zap'      && <Zap      size={11} />}
-                                </div>
-                                <div className="step-body">
-                                  <code className="step-tool">{step.tool}()</code>
-                                  <span className="step-desc">{step.desc}</span>
-                                  <span className="step-result">→ {step.result}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                  {/* Agent steps */}
+                  <div className="agent-steps">
+                    {pb.steps.map((step, i) => (
+                      <div className={`agent-step step-anim-${i}`} key={step.tool}>
+                        <div className="step-icon">
+                          {step.icon === 'search'   && <Search   size={12} />}
+                          {step.icon === 'database' && <Database size={12} />}
+                          {step.icon === 'terminal' && <Terminal size={12} />}
+                          {step.icon === 'activity' && <Activity size={12} />}
+                          {step.icon === 'zap'      && <Zap      size={12} />}
                         </div>
-                      )}
-
-                      {/* Root cause */}
-                      <div className="nd-section">
-                        <div className="nd-label"><Search size={13} /> Root Cause ({rca.confidence}% confidence)</div>
-                        <p>{pb?.rootCause ?? rca.recommendation}</p>
+                        <div className="step-body">
+                          <code className="step-tool">{step.tool}()</code>
+                          <span className="step-desc">{step.desc}</span>
+                          <span className="step-result">→ {step.result}</span>
+                        </div>
                       </div>
+                    ))}
+                  </div>
 
-                      {/* System trace */}
-                      <div className="nd-section">
-                        <div className="nd-label"><Terminal size={13} /> System Trace</div>
-                        <pre className="notif-trace">{rca.trace.join('\n')}</pre>
-                      </div>
+                  {/* Root cause */}
+                  <div className="session-rca">
+                    <div className="rca-label"><Bot size={12} /> Root Cause</div>
+                    <p>{pb.rootCause}</p>
+                    <div className="confidence">Confidence: <strong>{buildRca(alert).confidence}%</strong></div>
+                  </div>
 
-                      {/* Fix artifact */}
-                      {pb && (
-                        <div className="nd-section">
-                          <div className="nd-label">
-                            <Zap size={13} /> Proposed Fix
-                            <span className="fix-type-badge">{pb.fixType}</span>
-                            <span className="fix-recovery">{pb.recoveryTime}</span>
-                          </div>
-                          <pre className="fix-code">{pb.fixCode}</pre>
-                        </div>
-                      )}
+                  {/* Fix artifact */}
+                  <div className="session-fix">
+                    <div className="fix-head">
+                      <Terminal size={12} /> <span>Proposed Fix</span>
+                      <span className="fix-type-badge">{pb.fixType}</span>
+                      <span className="fix-recovery">Est. recovery: {pb.recoveryTime}</span>
+                    </div>
+                    <pre className="fix-code">{pb.fixCode}</pre>
+                  </div>
 
-                      {/* Revenue impact */}
-                      <div className="nd-section nd-impact">
-                        <div><span className="impact-label">Revenue at Risk</span><span className="impact-val">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span></div>
-                        <div><span className="impact-label">Impression Shortfall</span><span className="impact-val">{numberFmt.format(alert.expected_impressions - alert.actual_impressions)}</span></div>
-                        <div><span className="impact-label">Alert ID</span><span className="impact-val code">{alert.alert_id}</span></div>
-                      </div>
-
-                      {/* Actions */}
-                      {!dec && (
-                        <div className="nd-actions">
-                          <button className="btn-approve" type="button"
-                            onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
-                            <CheckCircle2 size={14} /> Approve &amp; Deploy
-                          </button>
-                          <div className="reject-group">
-                            <input
-                              className="reject-reason-input"
-                              placeholder="Rejection reason (optional)…"
-                              value={rejectReason[alert.alert_id] ?? ''}
-                              onChange={(e) => setRejectReason((p) => ({ ...p, [alert.alert_id]: e.target.value }))}
-                            />
-                            <button className="btn-reject" type="button"
-                              onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
-                              <XCircle size={14} /> Reject
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      {dec === 'approved' && (
-                        <div className="nd-deployed">
-                          <CheckCircle2 size={15} /> Fix approved and queued for deployment.
-                        </div>
-                      )}
-                      {dec === 'rejected' && (
-                        <div className="nd-rejected">
-                          <XCircle size={15} /> Fix rejected.{rejectReason[alert.alert_id] ? ` Reason: ${rejectReason[alert.alert_id]}` : ''}
-                        </div>
-                      )}
+                  {/* Actions */}
+                  {!dec && (
+                    <div className="session-actions">
+                      <button className="btn-approve" type="button"
+                        onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
+                        <CheckCircle2 size={14} /> Approve &amp; Deploy
+                      </button>
+                      <button className="btn-reject" type="button"
+                        onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
+                        <XCircle size={14} /> Reject
+                      </button>
                     </div>
                   )}
                 </div>
               )
-            })}
+            })() : (
+              <div className="intel-empty">Select an alert type to view analysis</div>
+            )}
+          </div>
         </div>
       </main>
       )}
@@ -1247,6 +1415,22 @@ function App() {
                     </div>
                   ))}
                 </div>
+                <div className="ex-card-footer">
+                  <button
+                    className="ex-btn-preview"
+                    type="button"
+                    onClick={() => setPreviewTable(t.name)}
+                  >
+                    <Search size={12} /> Preview
+                  </button>
+                  <button
+                    className="ex-btn-download"
+                    type="button"
+                    onClick={() => downloadCsv(t.file)}
+                  >
+                    <Database size={12} /> Download CSV
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1258,13 +1442,13 @@ function App() {
             <svg viewBox="0 0 920 500" className="ex-er-svg">
               <defs>
                 <marker id="fk-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
-                  <path d="M0,0 L0,6 L7,3 z" fill="#3a5880" />
+                  <path d="M0,0 L0,6 L7,3 z" fill="rgba(255,88,0,0.6)" />
                 </marker>
               </defs>
-              <g stroke="#2c4878" strokeWidth="1.5" fill="none" markerEnd="url(#fk-arrow)">
+              <g stroke="rgba(255,88,0,0.3)" strokeWidth="1.5" fill="none" markerEnd="url(#fk-arrow)">
                 {ER_LINES.map((l, i) => <path key={i} d={l.d} />)}
               </g>
-              <g fill="#3d5a88" fontSize="9" fontFamily="'JetBrains Mono','SFMono-Regular',monospace">
+              <g fill="#5A5F6E" fontSize="9" fontFamily="'JetBrains Mono','SFMono-Regular',monospace">
                 {ER_LINES.map((l, i) => <text key={i} x={l.lx} y={l.ly}>{l.label}</text>)}
               </g>
               {ER_NODES.map(({ name, cx, cy, color, cols, standalone }) => {
@@ -1273,7 +1457,7 @@ function App() {
                 const x = cx - w / 2, y = cy - h / 2
                 return (
                   <g key={name}>
-                    <rect x={x} y={y} width={w} height={h} rx={7} fill="#07112a" stroke={color} strokeWidth={1.5} strokeDasharray={standalone ? '5 3' : undefined} />
+                    <rect x={x} y={y} width={w} height={h} rx={7} fill="#1a1a1a" stroke={color} strokeWidth={1.5} strokeDasharray={standalone ? '5 3' : undefined} />
                     <rect x={x} y={y} width={w} height={headerH} rx={7} fill={color + '22'} />
                     <rect x={x} y={y + headerH - 2} width={w} height={2} fill={color + '44'} />
                     <text x={cx} y={y + 17} textAnchor="middle" fill={color} fontSize={11} fontWeight="bold" fontFamily="'JetBrains Mono','SFMono-Regular',monospace">{name}</text>
@@ -1282,9 +1466,9 @@ function App() {
                       return (
                         <g key={colName}>
                           {flag === 'PK' && <text x={x + 6} y={rowY} fill="#fbbf24" fontSize={8} fontWeight="bold">PK</text>}
-                          {flag === 'FK' && <text x={x + 6} y={rowY} fill="#7da8ff" fontSize={8} fontWeight="bold">FK</text>}
+                          {flag === 'FK' && <text x={x + 6} y={rowY} fill="#FF8C42" fontSize={8} fontWeight="bold">FK</text>}
                           <text x={flag ? x + 22 : x + 8} y={rowY}
-                            fill={flag === 'PK' ? '#fde68a' : flag === 'FK' ? '#bcd0ff' : '#6a85b0'}
+                            fill={flag === 'PK' ? '#fde68a' : flag === 'FK' ? '#FFB347' : '#5A5F6E'}
                             fontSize={10} fontFamily="'JetBrains Mono','SFMono-Regular',monospace">{colName}</text>
                         </g>
                       )
@@ -1305,8 +1489,8 @@ function App() {
                 <code className="kpi-formula">{k.formula}</code>
                 <p className="kpi-desc">{k.description}</p>
                 <div className="kpi-thresholds">
-                  {k.good !== '—' && <span className="thr-good">✓ {k.good}</span>}
-                  {k.bad  !== '—' && <span className="thr-bad">✗ {k.bad}</span>}
+                  {k.good !== '—' && <span className="thr-good">&#10003; {k.good}</span>}
+                  {k.bad  !== '—' && <span className="thr-bad">&#10007; {k.bad}</span>}
                 </div>
               </div>
             ))}
@@ -1344,10 +1528,10 @@ function App() {
                 <h4>Active Campaigns by Advertiser Tier</h4>
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={tierBreakdown} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="#1a2848" strokeDasharray="3 3" />
-                    <XAxis dataKey="name" stroke="#7f93c8" tick={{ fontSize: 12 }} />
-                    <YAxis stroke="#7f93c8" tick={{ fontSize: 12 }} />
-                    <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 10 }} />
+                    <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" />
+                    <XAxis dataKey="name" stroke="#5A5F6E" tick={{ fontSize: 12 }} />
+                    <YAxis stroke="#5A5F6E" tick={{ fontSize: 12 }} />
+                    <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 10 }} />
                     <Bar dataKey="value" name="Campaigns" radius={[5, 5, 0, 0]}>
                       {tierBreakdown.map((_, i) => <Cell key={i} fill={['#fbbf24', '#9ca3af', '#cd7c3a'][i]} />)}
                     </Bar>
@@ -1360,11 +1544,11 @@ function App() {
                       .map((name) => ({ name, count: activeByCampaigns.filter((c) => platformMap[c.platform_id]?.platform_name === name).length }))
                       .sort((a, b) => b.count - a.count).slice(0, 8)}
                     margin={{ top: 4, right: 40, left: 90, bottom: 0 }}>
-                    <CartesianGrid stroke="#1a2848" strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" stroke="#7f93c8" tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="name" stroke="#7f93c8" tick={{ fontSize: 11 }} width={85} />
-                    <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 10 }} />
-                    <Bar dataKey="count" fill="#6583ff" radius={[0, 4, 4, 0]} name="Campaigns" />
+                    <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" stroke="#5A5F6E" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" stroke="#5A5F6E" tick={{ fontSize: 11 }} width={85} />
+                    <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 10 }} />
+                    <Bar dataKey="count" fill="#FF5800" radius={[0, 4, 4, 0]} name="Campaigns" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1381,7 +1565,7 @@ function App() {
                         <td><strong>{h.campaign.campaign_name}</strong><br /><code>{h.campaign.campaign_id}</code></td>
                         <td>{h.platform_name}</td>
                         <td style={{ color: healthColor(h.deliveryRate) }}><strong>{h.deliveryRate.toFixed(1)}%</strong></td>
-                        <td style={{ color: '#ff7a8a' }}>{(100 - h.deliveryRate).toFixed(1)}% below</td>
+                        <td style={{ color: '#ef4444' }}>{(100 - h.deliveryRate).toFixed(1)}% below</td>
                         <td>{h.alertCount > 0 ? <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span> : '—'}</td>
                       </tr>
                     ))}
@@ -1406,7 +1590,7 @@ function App() {
                       <tr key={t.type}>
                         <td><strong>{t.type}</strong></td>
                         <td>{t.count}</td>
-                        <td style={{ color: '#ff7a8a' }}>{currencyFmt.format(t.revenue)}</td>
+                        <td style={{ color: '#ef4444' }}>{currencyFmt.format(t.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1422,10 +1606,10 @@ function App() {
                   <tbody>
                     {topRevenueAlerts.map((a) => (
                       <tr key={a.alert_id}>
-                        <td><strong>{a.campaign_name}</strong><br /><span style={{ color: '#4a6494', fontSize: '0.76rem' }}>{a.advertiser_name}</span></td>
+                        <td><strong>{a.campaign_name}</strong><br /><span style={{ color: '#5A5F6E', fontSize: '0.76rem' }}>{a.advertiser_name}</span></td>
                         <td>{a.alert_type}</td>
                         <td><span className={`severity-pill ${a.severity.toLowerCase()}`}>{a.severity}</span></td>
-                        <td style={{ color: '#ff7a8a' }}><strong>{currencyFmt.format(Number(a.revenue_impact_usd))}</strong></td>
+                        <td style={{ color: '#ef4444' }}><strong>{currencyFmt.format(Number(a.revenue_impact_usd))}</strong></td>
                       </tr>
                     ))}
                   </tbody>
@@ -1440,17 +1624,17 @@ function App() {
                   <AreaChart data={pacingSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="ddFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor="#6180ff" stopOpacity={0.5} />
-                        <stop offset="95%" stopColor="#6180ff" stopOpacity={0.03} />
+                        <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.5} />
+                        <stop offset="95%" stopColor="#FF5800" stopOpacity={0.03} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="#1a2848" strokeDasharray="3 3" />
-                    <XAxis dataKey="hour" stroke="#7f93c8" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#7f93c8" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 12 }}
+                    <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" />
+                    <XAxis dataKey="hour" stroke="#5A5F6E" tick={{ fontSize: 11 }} />
+                    <YAxis stroke="#5A5F6E" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 11 }} />
+                    <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 12 }}
                       formatter={(v) => numberFmt.format(Number(v ?? 0))} />
-                    <Area type="monotone" dataKey="target" stroke="#7f91b9" strokeDasharray="4 4" fill="none" name="Target" />
-                    <Area type="monotone" dataKey="actual" stroke="#6583ff" fill="url(#ddFill)" name="Actual" />
+                    <Area type="monotone" dataKey="target" stroke="#5A5F6E" strokeDasharray="4 4" fill="none" name="Target" />
+                    <Area type="monotone" dataKey="actual" stroke="#FF5800" fill="url(#ddFill)" name="Actual" />
                   </AreaChart>
                 </ResponsiveContainer>
                 <h4>Bottom 5 Under-Delivering Campaigns</h4>
@@ -1476,12 +1660,12 @@ function App() {
                   <BarChart layout="vertical"
                     data={alertTypeTotals.sort((a, b) => b.revenue - a.revenue)}
                     margin={{ top: 4, right: 80, left: 150, bottom: 0 }}>
-                    <CartesianGrid stroke="#1a2848" strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" stroke="#7f93c8" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="type" stroke="#7f93c8" tick={{ fontSize: 10 }} width={145} />
-                    <Tooltip contentStyle={{ background: '#08122f', border: '1px solid #1f2c57', borderRadius: 10 }}
+                    <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" stroke="#5A5F6E" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 10 }} />
+                    <YAxis type="category" dataKey="type" stroke="#5A5F6E" tick={{ fontSize: 10 }} width={145} />
+                    <Tooltip contentStyle={{ background: '#1e1e1e', border: '1px solid rgba(255,88,0,0.3)', borderRadius: 10 }}
                       formatter={(v, n) => n === 'revenue' ? currencyFmt.format(Number(v)) : v} />
-                    <Bar dataKey="revenue" name="revenue" radius={[0, 4, 4, 0]} fill="#ff5d96" />
+                    <Bar dataKey="revenue" name="revenue" radius={[0, 4, 4, 0]} fill="#FF5800" />
                   </BarChart>
                 </ResponsiveContainer>
                 <table className="dd-table">
@@ -1491,8 +1675,8 @@ function App() {
                       <tr key={t.type}>
                         <td><strong>{t.type}</strong></td>
                         <td>{t.count}</td>
-                        <td style={{ color: '#ff7a8a' }}>{currencyFmt.format(t.revenue)}</td>
-                        <td>{AGENT_PLAYBOOK[t.type] ? <span style={{ color: '#38d9b2' }}>✓ Yes</span> : <span style={{ color: '#6a85b0' }}>—</span>}</td>
+                        <td style={{ color: '#ef4444' }}>{currencyFmt.format(t.revenue)}</td>
+                        <td>{AGENT_PLAYBOOK[t.type] ? <span style={{ color: '#22c55e' }}>&#10003; Yes</span> : <span style={{ color: '#5A5F6E' }}>—</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1502,6 +1686,68 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          DATA PREVIEW MODAL
+      ════════════════════════════════════════════════════════════════ */}
+      {previewTable && (() => {
+        const previewData = getPreviewData(previewTable)
+        const tableEntry = TABLE_CATALOG.find(t => t.name === previewTable)
+        const columns = previewData.length > 0 ? Object.keys(previewData[0]) : []
+        return (
+          <div className="modal-backdrop" onClick={() => setPreviewTable(null)}>
+            <div className="modal-box modal-box-wide" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-head">
+                <h3>Preview: <code>{previewTable}</code></h3>
+                <div className="modal-head-actions">
+                  <button
+                    type="button"
+                    className="ex-btn-download"
+                    onClick={() => tableEntry && downloadCsv(tableEntry.file)}
+                  >
+                    <Database size={13} /> Download CSV
+                  </button>
+                  <button type="button" onClick={() => setPreviewTable(null)}><X size={18} /></button>
+                </div>
+              </div>
+              <div className="modal-body">
+                {previewData.length > 0 ? (
+                  <>
+                    <p className="modal-sub">Showing first {previewData.length} rows</p>
+                    <div className="preview-table-wrap">
+                      <table className="preview-table">
+                        <thead>
+                          <tr>{columns.map(c => <th key={c}>{c}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                          {previewData.map((row, i) => (
+                            <tr key={i}>
+                              {columns.map(c => <td key={c}>{String(row[c] ?? '')}</td>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="preview-empty">
+                    <p>Data not loaded in memory — download to view</p>
+                    {tableEntry && (
+                      <button
+                        type="button"
+                        className="ex-btn-download"
+                        onClick={() => downloadCsv(tableEntry.file)}
+                      >
+                        <Database size={13} /> Download CSV
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── RCA Side Panel (from overview alert click) ── */}
       {selectedAlert && (
