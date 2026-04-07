@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -338,6 +338,23 @@ const ER_LINES: ErLine[] = [
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
+function useCountUp(target: number, duration = 1400) {
+  const [val, setVal] = useState(0)
+  const raf = useRef<number>(0)
+  useEffect(() => {
+    const start = performance.now()
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setVal(Math.round(eased * target))
+      if (p < 1) raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf.current)
+  }, [target, duration])
+  return val
+}
+
 function parseDate(s: string) { return new Date(s.replace(' ', 'T')) }
 
 function flightHours(c: Campaign) {
@@ -626,7 +643,15 @@ function App() {
   if (loading) {
     return (
       <div className="loading-shell">
-        <div className="loading-card"><MonitorPlay size={22} /><p>Building AdOps Intelligence Workspace...</p></div>
+        <div className="loading-card">
+          <div className="loading-ring">
+            <MonitorPlay size={22} />
+          </div>
+          <div>
+            <p className="loading-title">Building AdOps Intelligence Workspace</p>
+            <p className="loading-sub">Loading campaign data, alerts &amp; performance metrics…</p>
+          </div>
+        </div>
       </div>
     )
   }
@@ -643,61 +668,93 @@ function App() {
   enrichedAlerts.forEach((a) => { const t = alertTypeTotals.find((x) => x.type === a.alert_type); if (t) { t.count++; t.revenue += Number(a.revenue_impact_usd) } })
   const topRevenueAlerts = [...enrichedAlerts].sort((a, b) => Number(b.revenue_impact_usd) - Number(a.revenue_impact_usd)).slice(0, 8)
 
+  // Count-up animated values for metric cards
+  const countCampaigns = useCountUp(topMetrics.activeCampaigns)
+  const countAlerts    = useCountUp(topMetrics.activeAlerts)
+  const countRevenue   = useCountUp(topMetrics.revenueAtRisk)
+
   return (
     <div className="app-shell">
+      {/* ── ANIMATED BACKGROUND ── */}
+      <div className="bg-canvas" aria-hidden="true">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+        <div className="orb orb-4" />
+      </div>
 
       {/* ── TOP NAV ── */}
       <header className="top-nav">
         <div className="brand">
-          <div className="brand-mark">AO</div>
-          <div><strong>AdOps Copilot</strong><span>Warner Network Control Plane</span></div>
+          <div className="brand-mark">
+            <MonitorPlay size={16} />
+          </div>
+          <div>
+            <strong>AdOps Copilot</strong>
+            <span>Warner Network Control Plane</span>
+          </div>
         </div>
         <nav className="tabs">
-          <button className={`tab ${activeTab === 'overview' ? 'active' : ''}`}      onClick={() => setActiveTab('overview')}><LayoutDashboard size={15} /> Overview</button>
-          <button className={`tab ${activeTab === 'health' ? 'active' : ''}`}        onClick={() => setActiveTab('health')}><Activity size={15} /> Campaign Health</button>
-          <button className={`tab ${activeTab === 'intel' ? 'active' : ''}`}         onClick={() => setActiveTab('intel')}><Bot size={15} /> Intelligence Feed</button>
+          <button className={`tab ${activeTab === 'overview' ? 'active' : ''}`}      onClick={() => setActiveTab('overview')}><LayoutDashboard size={14} /> Overview</button>
+          <button className={`tab ${activeTab === 'health' ? 'active' : ''}`}        onClick={() => setActiveTab('health')}><Activity size={14} /> Campaign Health</button>
+          <button className={`tab ${activeTab === 'intel' ? 'active' : ''}`}         onClick={() => setActiveTab('intel')}><Bot size={14} /> Intelligence Feed</button>
           <button className={`tab ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
-            <Bell size={15} /> Notifications
+            <Bell size={14} /> Notifications
             {enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length > 0 && (
               <span className="notif-badge">{enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length}</span>
             )}
           </button>
-          <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`}      onClick={() => setActiveTab('explorer')}><Database size={15} /> Data Explorer</button>
+          <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`}      onClick={() => setActiveTab('explorer')}><Database size={14} /> Data Explorer</button>
         </nav>
-        <div className="status-pill">System Status: <strong>Degraded</strong></div>
+        <div className="status-pill">
+          <span className="live-dot" />
+          System Status: <strong>Degraded</strong>
+        </div>
       </header>
 
       {/* ════════════════════════════════════════════════════════════════
           OVERVIEW TAB
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'overview' && (
-      <main className="content-grid">
+      <main key="overview" className="content-grid tab-content">
         <section className="metric-grid">
-          <article className="metric-card clickable" onClick={() => setDrilldown('campaigns')}>
-            <div className="metric-head"><span>Active Campaigns</span><TrendingUp size={16} /></div>
-            <h2>{numberFmt.format(topMetrics.activeCampaigns)}</h2>
+          <article className="metric-card clickable" style={{ '--accent': '#4f7cff' } as React.CSSProperties} onClick={() => setDrilldown('campaigns')}>
+            <div className="metric-head">
+              <span>Active Campaigns</span>
+              <div className="metric-icon" style={{ background: 'rgba(79,124,255,0.12)', color: '#4f7cff' }}><TrendingUp size={15} /></div>
+            </div>
+            <h2>{numberFmt.format(countCampaigns)}</h2>
             <p className="positive">Live across Streaming + Linear</p>
-            <span className="drill-hint">Click to explore <ChevronRight size={12} /></span>
+            <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
-          <article className="metric-card clickable" onClick={() => setDrilldown('delivery')}>
-            <div className="metric-head"><span>Average Delivery Rate</span><MonitorPlay size={16} /></div>
-            <h2>{topMetrics.avgDeliveryRate.toFixed(1)}%</h2>
+          <article className="metric-card clickable" style={{ '--accent': '#00d4ff' } as React.CSSProperties} onClick={() => setDrilldown('delivery')}>
+            <div className="metric-head">
+              <span>Average Delivery Rate</span>
+              <div className="metric-icon" style={{ background: 'rgba(0,212,255,0.10)', color: '#00d4ff' }}><MonitorPlay size={15} /></div>
+            </div>
+            <h2>{topMetrics.avgDeliveryRate.toFixed(1)}<span className="metric-unit">%</span></h2>
             <p className={topMetrics.avgDeliveryRate >= 90 ? 'positive' : 'negative'}>
               {topMetrics.avgDeliveryRate >= 90 ? 'Within pacing guardrails' : 'Below pacing target'}
             </p>
-            <span className="drill-hint">Click to explore <ChevronRight size={12} /></span>
+            <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
-          <article className="metric-card clickable" onClick={() => setDrilldown('alerts')}>
-            <div className="metric-head"><span>Active Alerts</span><ShieldAlert size={16} /></div>
-            <h2>{numberFmt.format(topMetrics.activeAlerts)}</h2>
+          <article className="metric-card clickable" style={{ '--accent': '#ff5d7e' } as React.CSSProperties} onClick={() => setDrilldown('alerts')}>
+            <div className="metric-head">
+              <span>Active Alerts</span>
+              <div className="metric-icon" style={{ background: 'rgba(255,93,126,0.12)', color: '#ff5d7e' }}><ShieldAlert size={15} /></div>
+            </div>
+            <h2>{numberFmt.format(countAlerts)}</h2>
             <p className="negative">Critical issues requiring intervention</p>
-            <span className="drill-hint">Click to explore <ChevronRight size={12} /></span>
+            <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
-          <article className="metric-card clickable" onClick={() => setDrilldown('revenue')}>
-            <div className="metric-head"><span>Revenue at Risk</span><CircleDollarSign size={16} /></div>
-            <h2>{currencyFmt.format(topMetrics.revenueAtRisk)}</h2>
+          <article className="metric-card clickable" style={{ '--accent': '#ffc156' } as React.CSSProperties} onClick={() => setDrilldown('revenue')}>
+            <div className="metric-head">
+              <span>Revenue at Risk</span>
+              <div className="metric-icon" style={{ background: 'rgba(255,193,86,0.10)', color: '#ffc156' }}><CircleDollarSign size={15} /></div>
+            </div>
+            <h2>{currencyFmt.format(countRevenue)}</h2>
             <p className="negative">Potentially lost from unresolved fallout</p>
-            <span className="drill-hint">Click to explore <ChevronRight size={12} /></span>
+            <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
         </section>
 
@@ -781,7 +838,7 @@ function App() {
           CAMPAIGN HEALTH TAB
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'health' && (
-      <main className="health-shell">
+      <main key="health" className="health-shell tab-content">
         <div className="health-summary">
           {[
             { label: 'Healthy (≥90%)',  count: campaignHealth.filter((h) => h.deliveryRate >= 90).length, color: '#38d9b2' },
@@ -917,7 +974,7 @@ function App() {
           INTELLIGENCE FEED TAB
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'intel' && (
-      <main className="intel-shell">
+      <main key="intel" className="intel-shell tab-content">
 
         {/* Agent pipeline visual */}
         <section className="pipeline-banner">
@@ -1026,7 +1083,7 @@ function App() {
           NOTIFICATIONS TAB
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'notifications' && (
-      <main className="notif-shell">
+      <main key="notifications" className="notif-shell tab-content">
         <div className="notif-header">
           <div className="notif-title">
             <Bell size={16} /> <strong>Alert Notifications</strong>
@@ -1167,7 +1224,7 @@ function App() {
           DATA EXPLORER TAB
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'explorer' && (
-      <main className="explorer-shell">
+      <main key="explorer" className="explorer-shell tab-content">
         <section className="ex-section">
           <div className="ex-section-head"><Table2 size={17} /><h2>Data Catalog</h2><span className="ex-badge">9 tables</span></div>
           <div className="ex-table-grid">
