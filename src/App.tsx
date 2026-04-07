@@ -16,10 +16,12 @@ import {
   AlertTriangle,
   Bell,
   CircleDollarSign,
+  Database,
   LayoutDashboard,
   MonitorPlay,
   ShieldAlert,
   Sparkles,
+  Table2,
   TrendingUp,
   Wrench,
   X,
@@ -227,6 +229,201 @@ function buildRca(alert: EnrichedAlert) {
   }
 }
 
+const TABLE_CATALOG = [
+  {
+    name: 'advertisers', file: 'advertisers.csv', color: '#4472ff',
+    description: 'Brand accounts purchasing ad inventory across Warner networks.',
+    columns: [
+      { name: 'advertiser_id', type: 'STRING', pk: true, fk: false },
+      { name: 'name', type: 'STRING', pk: false, fk: false },
+      { name: 'industry', type: 'STRING', pk: false, fk: false },
+      { name: 'tier', type: 'STRING', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'agencies', file: 'agencies.csv', color: '#4472ff',
+    description: 'Media buying agencies placing orders on behalf of advertisers.',
+    columns: [
+      { name: 'agency_id', type: 'STRING', pk: true, fk: false },
+      { name: 'name', type: 'STRING', pk: false, fk: false },
+      { name: 'contact_email', type: 'STRING', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'platforms', file: 'platforms.csv', color: '#4472ff',
+    description: 'Ad delivery platforms — Streaming (HBO Max, CNN+) and Linear (TNT, TBS, truTV).',
+    columns: [
+      { name: 'platform_id', type: 'STRING', pk: true, fk: false },
+      { name: 'platform_name', type: 'STRING', pk: false, fk: false },
+      { name: 'platform_type', type: 'STRING', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'audience_segments', file: 'audience_segments.csv', color: '#4472ff',
+    description: 'DMP-sourced audience targeting segments used in campaign targeting expressions.',
+    columns: [
+      { name: 'segment_id', type: 'STRING', pk: true, fk: false },
+      { name: 'segment_name', type: 'STRING', pk: false, fk: false },
+      { name: 'provider', type: 'STRING', pk: false, fk: false },
+      { name: 'sync_status', type: 'STRING', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'campaigns', file: 'campaigns.csv', color: '#9333ea',
+    description: 'Core campaign records. Central fact table linking advertisers, agencies, platforms, and segments.',
+    columns: [
+      { name: 'campaign_id', type: 'STRING', pk: true, fk: false },
+      { name: 'campaign_name', type: 'STRING', pk: false, fk: false },
+      { name: 'advertiser_id', type: 'STRING', pk: false, fk: true },
+      { name: 'agency_id', type: 'STRING', pk: false, fk: true },
+      { name: 'platform_id', type: 'STRING', pk: false, fk: true },
+      { name: 'segment_id', type: 'STRING', pk: false, fk: true },
+      { name: 'status', type: 'ENUM', pk: false, fk: false },
+      { name: 'start_date', type: 'DATE', pk: false, fk: false },
+      { name: 'end_date', type: 'DATE', pk: false, fk: false },
+      { name: 'target_impressions', type: 'INT', pk: false, fk: false },
+      { name: 'cpm_usd', type: 'FLOAT', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'creatives', file: 'creatives.csv', color: '#f59e0b',
+    description: 'Ad creative assets (video/display) associated with campaign flights.',
+    columns: [
+      { name: 'creative_id', type: 'STRING', pk: true, fk: false },
+      { name: 'campaign_id', type: 'STRING', pk: false, fk: true },
+      { name: 'creative_name', type: 'STRING', pk: false, fk: false },
+      { name: 'format', type: 'STRING', pk: false, fk: false },
+      { name: 'bitrate_kbps', type: 'INT', pk: false, fk: false },
+      { name: 'duration_sec', type: 'INT', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'performance_log', file: 'performance_log.csv', color: '#22c55e',
+    description: 'Hourly delivery metrics per campaign. Primary time-series fact table (~155K rows, 9.4 MB).',
+    columns: [
+      { name: 'log_hour', type: 'DATETIME', pk: false, fk: false },
+      { name: 'campaign_id', type: 'STRING', pk: false, fk: true },
+      { name: 'impressions_delivered', type: 'INT', pk: false, fk: false },
+      { name: 'vast_requests', type: 'INT', pk: false, fk: false },
+      { name: 'vast_responses', type: 'INT', pk: false, fk: false },
+      { name: 'avg_latency_ms', type: 'INT', pk: false, fk: false },
+      { name: 'error_count', type: 'INT', pk: false, fk: false },
+      { name: 'video_completes', type: 'INT', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'alerts', file: 'alerts.csv', color: '#ef4444',
+    description: 'System-generated delivery and performance alerts with revenue impact estimates.',
+    columns: [
+      { name: 'alert_id', type: 'STRING', pk: true, fk: false },
+      { name: 'alert_timestamp', type: 'DATETIME', pk: false, fk: false },
+      { name: 'severity', type: 'ENUM', pk: false, fk: false },
+      { name: 'alert_type', type: 'STRING', pk: false, fk: false },
+      { name: 'campaign_id', type: 'STRING', pk: false, fk: true },
+      { name: 'trigger_value', type: 'STRING', pk: false, fk: false },
+      { name: 'threshold', type: 'STRING', pk: false, fk: false },
+      { name: 'expected_impressions', type: 'INT', pk: false, fk: false },
+      { name: 'actual_impressions', type: 'INT', pk: false, fk: false },
+      { name: 'revenue_impact_usd', type: 'FLOAT', pk: false, fk: false },
+      { name: 'status', type: 'STRING', pk: false, fk: false },
+    ],
+  },
+  {
+    name: 'kpi_summary', file: 'kpi_summary.csv', color: '#06b6d4',
+    description: 'Pre-aggregated KPI snapshot. Materialized view of key system metrics for dashboard tiles.',
+    columns: [
+      { name: 'kpi_name', type: 'STRING', pk: false, fk: false },
+      { name: 'value', type: 'STRING', pk: false, fk: false },
+      { name: 'unit', type: 'STRING', pk: false, fk: false },
+      { name: 'as_of', type: 'DATETIME', pk: false, fk: false },
+    ],
+  },
+] as const
+
+const KPI_FORMULAS = [
+  {
+    name: 'Delivery Rate',
+    formula: 'impressions_delivered ÷ (target_impressions ÷ flight_hours) × 100',
+    unit: '%', source: 'performance_log + campaigns',
+    description: "Measures hourly pacing against the campaign's target rate. Below 90% triggers a pacing alert.",
+    good: '≥ 90%', bad: '< 85%',
+  },
+  {
+    name: 'Fill Rate',
+    formula: 'vast_responses ÷ vast_requests × 100',
+    unit: '%', source: 'performance_log',
+    description: 'Percentage of ad requests that returned a valid VAST response from the ad decision engine.',
+    good: '≥ 95%', bad: '< 80%',
+  },
+  {
+    name: 'Video Completion Rate (VCR)',
+    formula: 'video_completes ÷ impressions_delivered × 100',
+    unit: '%', source: 'performance_log',
+    description: 'Ratio of viewers who watched the full ad. Key quality signal for premium video inventory.',
+    good: '≥ 70%', bad: '< 50%',
+  },
+  {
+    name: 'VAST Error Rate',
+    formula: 'error_count ÷ vast_requests × 100',
+    unit: '%', source: 'performance_log',
+    description: 'Proportion of ad requests resulting in VAST errors (timeouts, empty pods, malformed responses).',
+    good: '< 3%', bad: '> 8%',
+  },
+  {
+    name: 'Revenue at Risk',
+    formula: "Σ revenue_impact_usd  WHERE  status = 'Open'",
+    unit: 'USD', source: 'alerts',
+    description: 'Total estimated revenue exposure from all unresolved alerts. Primary urgency signal for AdOps triage.',
+    good: '< $10K', bad: '> $50K',
+  },
+  {
+    name: 'Effective CPM',
+    formula: '(campaign_budget ÷ impressions_delivered) × 1,000',
+    unit: 'USD/M', source: 'campaigns + performance_log',
+    description: 'Actual cost per 1,000 delivered impressions vs. contracted cpm_usd. Deviation flags billing risk.',
+    good: 'Within ±10% of cpm_usd', bad: '> 15% above cpm_usd',
+  },
+  {
+    name: 'Impression Shortfall',
+    formula: 'expected_impressions − actual_impressions',
+    unit: 'imps', source: 'alerts',
+    description: 'Absolute delivery gap at alert time. Used by traffickers to calculate make-good commitments.',
+    good: '< 5% of target', bad: '> 15% of target',
+  },
+  {
+    name: 'Flight Hours',
+    formula: '(end_date − start_date + 1 day) × 24',
+    unit: 'hours', source: 'campaigns',
+    description: 'Total flight duration in hours. Denominator for per-hour target impressions in pacing calculations.',
+    good: '—', bad: '—',
+  },
+] as const
+
+type ErNode = { name: string; cx: number; cy: number; color: string; standalone?: boolean; cols: [string, string][] }
+type ErLine = { d: string; label: string; lx: number; ly: number }
+
+const ER_NODES: ErNode[] = [
+  { name: 'advertisers',      cx: 130, cy: 70,  color: '#4472ff', cols: [['PK','advertiser_id'],['','name'],['','industry'],['','tier']] },
+  { name: 'agencies',         cx: 130, cy: 250, color: '#4472ff', cols: [['PK','agency_id'],['','name'],['','contact_email']] },
+  { name: 'audience_segments',cx: 130, cy: 430, color: '#4472ff', cols: [['PK','segment_id'],['','segment_name'],['','provider'],['','sync_status']] },
+  { name: 'kpi_summary',      cx: 460, cy: 70,  color: '#06b6d4', standalone: true, cols: [['','kpi_name'],['','value'],['','unit'],['','as_of']] },
+  { name: 'campaigns',        cx: 460, cy: 255, color: '#9333ea', cols: [['PK','campaign_id'],['FK','advertiser_id'],['FK','agency_id'],['FK','platform_id'],['FK','segment_id'],['','status'],['','cpm_usd']] },
+  { name: 'alerts',           cx: 460, cy: 440, color: '#ef4444', cols: [['PK','alert_id'],['FK','campaign_id'],['','severity'],['','alert_type'],['','revenue_impact_usd']] },
+  { name: 'platforms',        cx: 790, cy: 70,  color: '#4472ff', cols: [['PK','platform_id'],['','platform_name'],['','platform_type']] },
+  { name: 'creatives',        cx: 790, cy: 250, color: '#f59e0b', cols: [['PK','creative_id'],['FK','campaign_id'],['','creative_name'],['','format'],['','bitrate_kbps']] },
+  { name: 'performance_log',  cx: 790, cy: 430, color: '#22c55e', cols: [['FK','campaign_id'],['','log_hour'],['','impressions_delivered'],['','vast_requests'],['','video_completes']] },
+]
+
+const ER_LINES: ErLine[] = [
+  { d: 'M 225,70 C 295,70 295,232 365,232',   label: 'advertiser_id', lx: 276, ly: 147 },
+  { d: 'M 225,250 L 365,245',                  label: 'agency_id',     lx: 269, ly: 241 },
+  { d: 'M 225,430 C 295,430 295,262 365,262',  label: 'segment_id',    lx: 276, ly: 350 },
+  { d: 'M 555,232 C 625,232 625,70 695,70',    label: 'platform_id',   lx: 627, ly: 147 },
+  { d: 'M 695,250 L 555,245',                  label: 'campaign_id',   lx: 612, ly: 241 },
+  { d: 'M 695,430 C 625,430 625,262 555,262',  label: 'campaign_id',   lx: 627, ly: 350 },
+  { d: 'M 460,336 L 460,368',                  label: 'campaign_id',   lx: 466, ly: 355 },
+]
+
 function App() {
   const [advertisers, setAdvertisers] = useState<Advertiser[]>([])
   const [platforms, setPlatforms] = useState<Platform[]>([])
@@ -238,6 +435,7 @@ function App() {
   const [autofixDone, setAutofixDone] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [isLightweightMode, setIsLightweightMode] = useState(true)
+  const [activeTab, setActiveTab] = useState<'overview' | 'explorer'>('overview')
 
   useEffect(() => {
     const load = async () => {
@@ -406,15 +604,17 @@ function App() {
         </div>
 
         <nav className="tabs">
-          <button className="tab active"><LayoutDashboard size={15} /> Overview</button>
+          <button className={`tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')}><LayoutDashboard size={15} /> Overview</button>
           <button className="tab">Campaign Health</button>
           <button className="tab">Intelligence Feed</button>
           <button className="tab"><Bell size={15} /> Notifications</button>
+          <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}><Database size={15} /> Data Explorer</button>
         </nav>
 
         <div className="status-pill">System Status: <strong>Degraded</strong></div>
       </header>
 
+      {activeTab === 'overview' ? (
       <main className="content-grid">
         <section className="metric-grid">
           <article className="metric-card">
@@ -532,6 +732,136 @@ function App() {
           </div>
         </section>
       </main>
+      ) : (
+      <main className="explorer-shell">
+
+        {/* ── SECTION 1: TABLE CATALOG ── */}
+        <section className="ex-section">
+          <div className="ex-section-head">
+            <Table2 size={17} />
+            <h2>Data Catalog</h2>
+            <span className="ex-badge">9 tables · 6 CSV sources loaded</span>
+          </div>
+          <div className="ex-table-grid">
+            {TABLE_CATALOG.map((t) => (
+              <div className="ex-table-card" key={t.name} style={{ borderColor: t.color }}>
+                <div className="ex-table-header" style={{ background: `${t.color}18` }}>
+                  <span className="ex-table-name" style={{ color: t.color }}>{t.name}</span>
+                  <span className="ex-file-badge">{t.file}</span>
+                </div>
+                <p className="ex-table-desc">{t.description}</p>
+                <div className="ex-col-list">
+                  {t.columns.map((col) => (
+                    <div className="ex-col-row" key={col.name}>
+                      <div className="ex-col-flags">
+                        {col.pk && <span className="flag pk">PK</span>}
+                        {col.fk && <span className="flag fk">FK</span>}
+                      </div>
+                      <span className="ex-col-name">{col.name}</span>
+                      <span className="ex-col-type">{col.type}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── SECTION 2: ER DIAGRAM ── */}
+        <section className="ex-section">
+          <div className="ex-section-head">
+            <Database size={17} />
+            <h2>Entity Relationship Diagram</h2>
+            <span className="ex-badge">FK → PK relationships · dashed = no FK</span>
+          </div>
+          <div className="ex-er-wrap">
+            <svg viewBox="0 0 920 500" className="ex-er-svg">
+              <defs>
+                <marker id="fk-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L7,3 z" fill="#3a5880" />
+                </marker>
+              </defs>
+
+              {/* Relationship lines */}
+              <g stroke="#2c4878" strokeWidth="1.5" fill="none" markerEnd="url(#fk-arrow)">
+                {ER_LINES.map((l, i) => <path key={i} d={l.d} />)}
+              </g>
+
+              {/* FK column labels on lines */}
+              <g fill="#3d5a88" fontSize="9" fontFamily="'JetBrains Mono','SFMono-Regular',monospace">
+                {ER_LINES.map((l, i) => <text key={i} x={l.lx} y={l.ly}>{l.label}</text>)}
+              </g>
+
+              {/* Table boxes */}
+              {ER_NODES.map(({ name, cx, cy, color, cols, standalone }) => {
+                const w = 185
+                const headerH = 28
+                const rowH = 18
+                const h = headerH + cols.length * rowH + 8
+                const x = cx - w / 2
+                const y = cy - h / 2
+                return (
+                  <g key={name}>
+                    <rect x={x} y={y} width={w} height={h} rx={7}
+                      fill="#07112a" stroke={color} strokeWidth={1.5}
+                      strokeDasharray={standalone ? '5 3' : undefined}
+                    />
+                    <rect x={x} y={y} width={w} height={headerH} rx={7} fill={color + '22'} />
+                    <rect x={x} y={y + headerH - 2} width={w} height={2} fill={color + '44'} />
+                    <text x={cx} y={y + 17} textAnchor="middle" fill={color}
+                      fontSize={11} fontWeight="bold"
+                      fontFamily="'JetBrains Mono','SFMono-Regular',monospace">
+                      {name}
+                    </text>
+                    {cols.map(([flag, colName], i) => {
+                      const rowY = y + headerH + i * rowH + 13
+                      return (
+                        <g key={colName}>
+                          {flag === 'PK' && <text x={x + 6} y={rowY} fill="#fbbf24" fontSize={8} fontWeight="bold">PK</text>}
+                          {flag === 'FK' && <text x={x + 6} y={rowY} fill="#7da8ff" fontSize={8} fontWeight="bold">FK</text>}
+                          <text x={flag ? x + 22 : x + 8} y={rowY}
+                            fill={flag === 'PK' ? '#fde68a' : flag === 'FK' ? '#bcd0ff' : '#6a85b0'}
+                            fontSize={10}
+                            fontFamily="'JetBrains Mono','SFMono-Regular',monospace">
+                            {colName}
+                          </text>
+                        </g>
+                      )
+                    })}
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
+        </section>
+
+        {/* ── SECTION 3: KPI FORMULAS ── */}
+        <section className="ex-section">
+          <div className="ex-section-head">
+            <TrendingUp size={17} />
+            <h2>KPI Formulas</h2>
+            <span className="ex-badge">{KPI_FORMULAS.length} metrics defined</span>
+          </div>
+          <div className="kpi-grid">
+            {KPI_FORMULAS.map((k) => (
+              <div className="kpi-card" key={k.name}>
+                <div className="kpi-card-head">
+                  <strong>{k.name}</strong>
+                  <span className="kpi-source-tag">{k.source}</span>
+                </div>
+                <code className="kpi-formula">{k.formula}</code>
+                <p className="kpi-desc">{k.description}</p>
+                <div className="kpi-thresholds">
+                  {k.good !== '—' && <span className="thr-good">✓ {k.good}</span>}
+                  {k.bad !== '—' && <span className="thr-bad">✗ {k.bad}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+      </main>
+      )}
 
       {selectedAlert && (
         <aside className="rca-panel">
