@@ -640,6 +640,11 @@ function App() {
       .slice(0, 6)
   }, [enrichedAlerts])
 
+  // Count-up animated values — must be before any early return (Rules of Hooks)
+  const countCampaigns = useCountUp(loading ? 0 : topMetrics.activeCampaigns)
+  const countAlerts    = useCountUp(loading ? 0 : topMetrics.activeAlerts)
+  const countRevenue   = useCountUp(loading ? 0 : topMetrics.revenueAtRisk)
+
   if (loading) {
     return (
       <div className="loading-shell">
@@ -667,11 +672,6 @@ function App() {
   const alertTypeTotals = [...new Map(enrichedAlerts.map((a) => [a.alert_type, { type: a.alert_type, count: 0, revenue: 0 }])).values()]
   enrichedAlerts.forEach((a) => { const t = alertTypeTotals.find((x) => x.type === a.alert_type); if (t) { t.count++; t.revenue += Number(a.revenue_impact_usd) } })
   const topRevenueAlerts = [...enrichedAlerts].sort((a, b) => Number(b.revenue_impact_usd) - Number(a.revenue_impact_usd)).slice(0, 8)
-
-  // Count-up animated values for metric cards
-  const countCampaigns = useCountUp(topMetrics.activeCampaigns)
-  const countAlerts    = useCountUp(topMetrics.activeAlerts)
-  const countRevenue   = useCountUp(topMetrics.revenueAtRisk)
 
   return (
     <div className="app-shell">
