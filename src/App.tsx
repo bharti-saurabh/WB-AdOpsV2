@@ -129,7 +129,6 @@ function loadCsv<T>(url: string): Promise<T[]> {
       skipEmptyLines: true,
       complete: (result: Papa.ParseResult<T>) => resolve(result.data),
       error: (err: Error) => reject(err),
-      worker: true,
     })
   })
 }
@@ -147,7 +146,6 @@ function loadPerformanceSample(
       header: true,
       dynamicTyping: true,
       skipEmptyLines: true,
-      worker: true,
       step: (result: Papa.ParseStepResult<PerformanceRow>) => {
         const row = result.data
         const keepBySample = rowIndex % sampleEveryNRows === 0
