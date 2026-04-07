@@ -245,17 +245,17 @@ function App() {
     const load = async () => {
       setLoading(true)
       const [a, p, c, al, k] = await Promise.all([
-        loadCsv<Advertiser>('/data/advertisers.csv'),
-        loadCsv<Platform>('/data/platforms.csv'),
-        loadCsv<Campaign>('/data/campaigns.csv'),
-        loadCsv<AlertRow>('/data/alerts.csv'),
-        loadCsv<KpiRow>('/data/kpi_summary.csv'),
+        loadCsv<Advertiser>(`${import.meta.env.BASE_URL}data/advertisers.csv`),
+        loadCsv<Platform>(`${import.meta.env.BASE_URL}data/platforms.csv`),
+        loadCsv<Campaign>(`${import.meta.env.BASE_URL}data/campaigns.csv`),
+        loadCsv<AlertRow>(`${import.meta.env.BASE_URL}data/alerts.csv`),
+        loadCsv<KpiRow>(`${import.meta.env.BASE_URL}data/kpi_summary.csv`),
       ])
 
       const alertCampaignIds = new Set(al.map((row) => row.campaign_id))
       const perf = isLightweightMode
-        ? await loadPerformanceSample('/data/performance_log.csv', 8, alertCampaignIds)
-        : await loadCsv<PerformanceRow>('/data/performance_log.csv')
+        ? await loadPerformanceSample(`${import.meta.env.BASE_URL}data/performance_log.csv`, 8, alertCampaignIds)
+        : await loadCsv<PerformanceRow>(`${import.meta.env.BASE_URL}data/performance_log.csv`)
 
       setAdvertisers(a)
       setPlatforms(p)
