@@ -1,0 +1,121 @@
+segment_id,segment_name,provider,sync_status
+SEG-001,Auto Intenders Cohort 1,First-Party,Failed
+SEG-002,Luxury EV Shoppers Cohort 1,First-Party,Active
+SEG-003,Truck Buyers Cohort 1,First-Party,Active
+SEG-004,Gamers Cohort 1,Nielsen,Active
+SEG-005,Movie Lovers Cohort 1,First-Party,Active
+SEG-006,Sports Streamers Cohort 1,LiveRamp,Active
+SEG-007,Cord Cutters Cohort 1,First-Party,Active
+SEG-008,Young Families Cohort 1,Nielsen,Active
+SEG-009,News Junkies Cohort 1,First-Party,Active
+SEG-010,Binge Watchers Cohort 1,First-Party,Active
+SEG-011,Tech Early Adopters Cohort 1,First-Party,Active
+SEG-012,QSR Loyalists Cohort 1,Nielsen,Active
+SEG-013,Frequent Flyers Cohort 1,First-Party,Active
+SEG-014,DIY Home Improvers Cohort 1,First-Party,Active
+SEG-015,Fantasy Sports Fans Cohort 1,First-Party,Active
+SEG-016,Anime Enthusiasts Cohort 1,Nielsen,Active
+SEG-017,Back-to-School Parents Cohort 1,First-Party,Active
+SEG-018,Deal Seekers Cohort 1,LiveRamp,Active
+SEG-019,Luxury Travelers Cohort 1,First-Party,Active
+SEG-020,Streaming Switchers Cohort 1,Nielsen,Active
+SEG-021,Auto Intenders Cohort 2,First-Party,Active
+SEG-022,Luxury EV Shoppers Cohort 2,First-Party,Active
+SEG-023,Truck Buyers Cohort 2,First-Party,Active
+SEG-024,Gamers Cohort 2,Nielsen,Active
+SEG-025,Movie Lovers Cohort 2,First-Party,Active
+SEG-026,Sports Streamers Cohort 2,First-Party,Active
+SEG-027,Cord Cutters Cohort 2,First-Party,Active
+SEG-028,Young Families Cohort 2,Nielsen,Active
+SEG-029,News Junkies Cohort 2,First-Party,Active
+SEG-030,Binge Watchers Cohort 2,LiveRamp,Active
+SEG-031,Tech Early Adopters Cohort 2,First-Party,Active
+SEG-032,QSR Loyalists Cohort 2,Nielsen,Active
+SEG-033,Frequent Flyers Cohort 2,First-Party,Active
+SEG-034,DIY Home Improvers Cohort 2,First-Party,Active
+SEG-035,Fantasy Sports Fans Cohort 2,First-Party,Active
+SEG-036,Anime Enthusiasts Cohort 2,Nielsen,Active
+SEG-037,Back-to-School Parents Cohort 2,First-Party,Failed
+SEG-038,Deal Seekers Cohort 2,First-Party,Active
+SEG-039,Luxury Travelers Cohort 2,First-Party,Active
+SEG-040,Streaming Switchers Cohort 2,Nielsen,Active
+SEG-041,Auto Intenders Cohort 3,First-Party,Active
+SEG-042,Luxury EV Shoppers Cohort 3,LiveRamp,Active
+SEG-043,Truck Buyers Cohort 3,First-Party,Active
+SEG-044,Gamers Cohort 3,Nielsen,Active
+SEG-045,Movie Lovers Cohort 3,First-Party,Active
+SEG-046,Sports Streamers Cohort 3,First-Party,Active
+SEG-047,Cord Cutters Cohort 3,First-Party,Active
+SEG-048,Young Families Cohort 3,Nielsen,Active
+SEG-049,News Junkies Cohort 3,First-Party,Active
+SEG-050,Binge Watchers Cohort 3,First-Party,Active
+SEG-051,Tech Early Adopters Cohort 3,First-Party,Active
+SEG-052,QSR Loyalists Cohort 3,Nielsen,Active
+SEG-053,Frequent Flyers Cohort 3,First-Party,Active
+SEG-054,DIY Home Improvers Cohort 3,LiveRamp,Active
+SEG-055,Fantasy Sports Fans Cohort 3,First-Party,Active
+SEG-056,Anime Enthusiasts Cohort 3,Nielsen,Active
+SEG-057,Back-to-School Parents Cohort 3,First-Party,Active
+SEG-058,Deal Seekers Cohort 3,First-Party,Active
+SEG-059,Luxury Travelers Cohort 3,First-Party,Active
+SEG-060,Streaming Switchers Cohort 3,Nielsen,Active
+SEG-061,Auto Intenders Cohort 4,First-Party,Active
+SEG-062,Luxury EV Shoppers Cohort 4,First-Party,Active
+SEG-063,Truck Buyers Cohort 4,First-Party,Active
+SEG-064,Gamers Cohort 4,Nielsen,Active
+SEG-065,Movie Lovers Cohort 4,First-Party,Active
+SEG-066,Sports Streamers Cohort 4,LiveRamp,Active
+SEG-067,Cord Cutters Cohort 4,First-Party,Active
+SEG-068,Young Families Cohort 4,Nielsen,Active
+SEG-069,News Junkies Cohort 4,First-Party,Active
+SEG-070,Binge Watchers Cohort 4,First-Party,Active
+SEG-071,Tech Early Adopters Cohort 4,First-Party,Active
+SEG-072,QSR Loyalists Cohort 4,Nielsen,Active
+SEG-073,Frequent Flyers Cohort 4,First-Party,Active
+SEG-074,DIY Home Improvers Cohort 4,First-Party,Active
+SEG-075,Fantasy Sports Fans Cohort 4,First-Party,Active
+SEG-076,Anime Enthusiasts Cohort 4,Nielsen,Active
+SEG-077,Back-to-School Parents Cohort 4,First-Party,Active
+SEG-078,Deal Seekers Cohort 4,LiveRamp,Active
+SEG-079,Luxury Travelers Cohort 4,First-Party,Active
+SEG-080,Streaming Switchers Cohort 4,Nielsen,Active
+SEG-081,Auto Intenders Cohort 5,First-Party,Active
+SEG-082,Luxury EV Shoppers Cohort 5,First-Party,Active
+SEG-083,Truck Buyers Cohort 5,First-Party,Active
+SEG-084,Gamers Cohort 5,Nielsen,Active
+SEG-085,Movie Lovers Cohort 5,First-Party,Active
+SEG-086,Sports Streamers Cohort 5,First-Party,Active
+SEG-087,Cord Cutters Cohort 5,First-Party,Active
+SEG-088,Young Families Cohort 5,Nielsen,Failed
+SEG-089,News Junkies Cohort 5,First-Party,Active
+SEG-090,Binge Watchers Cohort 5,LiveRamp,Active
+SEG-091,Tech Early Adopters Cohort 5,First-Party,Active
+SEG-092,QSR Loyalists Cohort 5,Nielsen,Active
+SEG-093,Frequent Flyers Cohort 5,First-Party,Active
+SEG-094,DIY Home Improvers Cohort 5,First-Party,Active
+SEG-095,Fantasy Sports Fans Cohort 5,First-Party,Active
+SEG-096,Anime Enthusiasts Cohort 5,Nielsen,Active
+SEG-097,Back-to-School Parents Cohort 5,First-Party,Active
+SEG-098,Deal Seekers Cohort 5,First-Party,Active
+SEG-099,Luxury Travelers Cohort 5,First-Party,Active
+SEG-100,Streaming Switchers Cohort 5,Nielsen,Active
+SEG-101,Auto Intenders Cohort 6,First-Party,Active
+SEG-102,Luxury EV Shoppers Cohort 6,LiveRamp,Active
+SEG-103,Truck Buyers Cohort 6,First-Party,Active
+SEG-104,Gamers Cohort 6,Nielsen,Active
+SEG-105,Movie Lovers Cohort 6,First-Party,Active
+SEG-106,Sports Streamers Cohort 6,First-Party,Active
+SEG-107,Cord Cutters Cohort 6,First-Party,Active
+SEG-108,Young Families Cohort 6,Nielsen,Active
+SEG-109,News Junkies Cohort 6,First-Party,Active
+SEG-110,Binge Watchers Cohort 6,First-Party,Active
+SEG-111,Tech Early Adopters Cohort 6,First-Party,Active
+SEG-112,QSR Loyalists Cohort 6,Nielsen,Active
+SEG-113,Frequent Flyers Cohort 6,First-Party,Active
+SEG-114,DIY Home Improvers Cohort 6,LiveRamp,Active
+SEG-115,Fantasy Sports Fans Cohort 6,First-Party,Active
+SEG-116,Anime Enthusiasts Cohort 6,Nielsen,Active
+SEG-117,Back-to-School Parents Cohort 6,First-Party,Active
+SEG-118,Deal Seekers Cohort 6,First-Party,Active
+SEG-119,Luxury Travelers Cohort 6,First-Party,Active
+SEG-120,Streaming Switchers Cohort 6,Nielsen,Active

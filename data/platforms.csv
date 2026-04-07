@@ -1,0 +1,21 @@
+platform_id,platform_name,platform_type
+PLT-001,MAX,CTV
+PLT-002,MAX,Mobile
+PLT-003,MAX,Web
+PLT-004,Discovery+,CTV
+PLT-005,Discovery+,Mobile
+PLT-006,CNN,Web
+PLT-007,CNN,Mobile
+PLT-008,TBS,CTV
+PLT-009,TNT,CTV
+PLT-010,truTV,CTV
+PLT-011,Cartoon Network,CTV
+PLT-012,Adult Swim,CTV
+PLT-013,HGTV,Web
+PLT-014,Food Network,Web
+PLT-015,TLC,Web
+PLT-016,ID,Web
+PLT-017,Animal Planet,Web
+PLT-018,OWN,Web
+PLT-019,Bleacher Report,Mobile
+PLT-020,Eurosport,Web
