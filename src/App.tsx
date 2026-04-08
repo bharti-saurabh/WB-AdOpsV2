@@ -5,7 +5,7 @@ import {
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  Activity, AlertTriangle, Bell, Bot, CheckCircle2, ChevronDown,
+  Activity, AlertTriangle, Bell, Bot, CheckCircle2,
   ChevronRight, CircleDollarSign, Database, LayoutDashboard,
   MonitorPlay, Search, ShieldAlert, Sparkles, Table2, Terminal,
   TrendingUp, Wrench, X, XCircle, Zap,
