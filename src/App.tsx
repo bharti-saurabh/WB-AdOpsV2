@@ -587,8 +587,6 @@ function App() {
 
   // Data explorer preview
   const [previewTable, setPreviewTable] = useState<string | null>(null)
-  // Intelligence feed selected alert type
-  const [intelSelectedType, setIntelSelectedType] = useState<string | null>(null)
   // Notifications agent state per alert
   const [agentState, setAgentState] = useState<Record<string, 'idle' | 'running' | 'complete'>>({})
   const [agentStep, setAgentStep] = useState<Record<string, number>>({})
@@ -749,37 +747,84 @@ function App() {
       .slice(0, 6)
   }, [enrichedAlerts])
 
-  // ── Unique alert types for Intel Feed
-  const uniqueAlertTypes = useMemo(() => {
-    const map = new Map<string, { type: string; count: number; revenue: number; topSeverity: string }>()
-    for (const a of enrichedAlerts) {
-      const existing = map.get(a.alert_type)
-      if (!existing) {
-        map.set(a.alert_type, { type: a.alert_type, count: 1, revenue: Number(a.revenue_impact_usd), topSeverity: a.severity })
-      } else {
-        existing.count++
-        existing.revenue += Number(a.revenue_impact_usd)
-        if (getSeverityWeight(a.severity) < getSeverityWeight(existing.topSeverity)) {
-          existing.topSeverity = a.severity
-        }
+
+  // ── Intelligence Board: hourly fill rate + completion rate over last 24h
+  const hourlyEngagement = useMemo(() => {
+    if (!last24Rows.length) return []
+    const byHour = new Map<string, { req: number; resp: number; compl: number; del: number; err: number }>()
+    for (const row of last24Rows) {
+      const slot = row.log_hour.slice(11, 16)
+      const prev = byHour.get(slot) ?? { req: 0, resp: 0, compl: 0, del: 0, err: 0 }
+      prev.req   += row.vast_requests
+      prev.resp  += row.vast_responses
+      prev.compl += row.video_completes
+      prev.del   += row.impressions_delivered
+      prev.err   += row.error_count
+      byHour.set(slot, prev)
+    }
+    return [...byHour.keys()].sort().map((hour) => {
+      const r = byHour.get(hour)!
+      return {
+        hour,
+        fillRate:   r.req  > 0 ? Math.round((r.resp  / r.req) * 1000) / 10 : 0,
+        vcr:        r.del  > 0 ? Math.round((r.compl / r.del) * 1000) / 10 : 0,
+        errorRate:  r.req  > 0 ? Math.round((r.err   / r.req) * 1000) / 10 : 0,
+      }
+    })
+  }, [last24Rows])
+
+  // ── Intelligence Board: fill rate + VCR by platform
+  const platformPerformance = useMemo(() => {
+    const byPlatform = new Map<string, { name: string; req: number; resp: number; compl: number; del: number }>()
+    for (const row of performance) {
+      const c   = campaignMap[row.campaign_id]; if (!c) continue
+      const plt = platformMap[c.platform_id];   if (!plt) continue
+      const key = plt.platform_name
+      const prev = byPlatform.get(key) ?? { name: key, req: 0, resp: 0, compl: 0, del: 0 }
+      prev.req   += row.vast_requests
+      prev.resp  += row.vast_responses
+      prev.compl += row.video_completes
+      prev.del   += row.impressions_delivered
+      byPlatform.set(key, prev)
+    }
+    return [...byPlatform.values()]
+      .map((p) => ({
+        name:     p.name,
+        fillRate: p.req > 0 ? Math.round((p.resp  / p.req) * 10) / 10 : 0,
+        vcr:      p.del > 0 ? Math.round((p.compl / p.del) * 10) / 10 : 0,
+      }))
+      .sort((a, b) => b.fillRate - a.fillRate)
+  }, [performance, campaignMap, platformMap])
+
+  // ── Intelligence Board: aggregate KPIs
+  const intelKpis = useMemo(() => {
+    let req = 0, resp = 0, compl = 0, del = 0, slaPass = 0, slaTotal = 0
+    for (const row of last24Rows) {
+      req   += row.vast_requests
+      resp  += row.vast_responses
+      compl += row.video_completes
+      del   += row.impressions_delivered
+      if (row.avg_latency_ms > 0) {
+        slaTotal++
+        if (row.avg_latency_ms < 1800) slaPass++
       }
     }
-    return [...map.values()].sort((a, b) => b.revenue - a.revenue)
-  }, [enrichedAlerts])
+    const fillRate  = req  > 0 ? (resp  / req)  * 100 : 0
+    const vcr       = del  > 0 ? (compl / del)  * 100 : 0
+    const slaComp   = slaTotal > 0 ? (slaPass / slaTotal) * 100 : 0
+    const totalRev  = campaigns.reduce((s, c) => s + (c.target_impressions * c.cpm_usd / 1000), 0)
+    const atRisk    = enrichedAlerts.reduce((s, a) => s + Number(a.revenue_impact_usd || 0), 0)
+    const revEff    = totalRev > 0 ? ((totalRev - atRisk) / totalRev) * 100 : 0
+    return { fillRate, vcr, slaComp, revEff, totalRev, atRisk }
+  }, [last24Rows, campaigns, enrichedAlerts])
 
-  // ── Selected intel alert (representative from the chosen type)
-  const selectedIntelAlert = useMemo(() => {
-    if (!intelSelectedType) return null
-    return agentSessions.find((a) => a.alert_type === intelSelectedType) ??
-      enrichedAlerts.find((a) => a.alert_type === intelSelectedType && AGENT_PLAYBOOK[a.alert_type]) ?? null
-  }, [intelSelectedType, agentSessions, enrichedAlerts])
-
-  // ── Auto-select highest revenue alert type on intel tab
-  useEffect(() => {
-    if (activeTab === 'intel' && uniqueAlertTypes.length > 0 && !intelSelectedType) {
-      setIntelSelectedType(uniqueAlertTypes[0].type)
-    }
-  }, [activeTab, uniqueAlertTypes, intelSelectedType])
+  // ── Intelligence Board: top campaigns by VCR for table
+  const topCampaignsByVcr = useMemo(() => {
+    return campaignHealth
+      .filter((c) => c.vcr > 0)
+      .sort((a, b) => b.vcr - a.vcr)
+      .slice(0, 8)
+  }, [campaignHealth])
 
   // ── Preview data helper
   const getPreviewData = useCallback((tableName: string): Record<string, unknown>[] => {
@@ -1540,132 +1585,230 @@ function App() {
       {activeTab === 'intel' && (
       <main key="intel" className="intel-shell tab-content">
 
-        {/* Agent pipeline visual */}
-        <section className="pipeline-banner">
-          <div className="pipeline-title"><Bot size={16} /> <strong>Agentic RCA Pipeline</strong> <span>— autonomous root cause analysis &amp; fix generation</span></div>
-          <div className="pipeline-steps">
-            {[
-              { icon: <ShieldAlert size={14} />, label: 'Signal Detected',  desc: 'Anomaly threshold crossed' },
-              { icon: <Search size={14} />,       label: 'Agent Dispatched', desc: 'RCA agent initialized' },
-              { icon: <Database size={14} />,     label: 'Data Correlation', desc: 'Multi-source tool calls' },
-              { icon: <Terminal size={14} />,     label: 'Root Cause ID',   desc: 'Hypothesis ranked by confidence' },
-              { icon: <Zap size={14} />,          label: 'Fix Generated',   desc: 'Deployment artifact created' },
-              { icon: <CheckCircle2 size={14} />, label: 'Human Review',    desc: 'Approve or reject' },
-            ].map((s, i, arr) => (
-              <div className="pipe-step-wrap" key={s.label}>
-                <div className="pipe-step">
-                  {s.icon}
-                  <strong>{s.label}</strong>
-                  <span>{s.desc}</span>
-                </div>
-                {i < arr.length - 1 && <ChevronRight size={14} className="pipe-arrow" />}
-              </div>
-            ))}
+        {/* Board header */}
+        <div className="board-header">
+          <div className="board-header-left">
+            <Sparkles size={16} className="board-header-icon" />
+            <div>
+              <h2 className="board-title">Strategic Intelligence Board</h2>
+              <p className="board-sub">AI-curated delivery analytics, engagement trends &amp; spend efficiency — last 24 hours</p>
+            </div>
           </div>
-        </section>
+          <div className="board-refresh-badge"><Activity size={11} /> Live · auto-refreshes</div>
+        </div>
 
-        {/* Intel layout: sidebar + main */}
-        <div className="intel-layout">
-          {/* Left: alert type selector */}
-          <aside className="intel-sidebar">
-            <div className="intel-sidebar-head"><Bot size={14} /> Select Alert Type</div>
-            {uniqueAlertTypes.map(({ type, count, revenue, topSeverity }) => (
-              <button
-                key={type}
-                className={`intel-type-btn ${intelSelectedType === type ? 'active' : ''}`}
-                onClick={() => setIntelSelectedType(type)}
-                type="button"
-              >
-                <span className={`severity-pill ${topSeverity.toLowerCase()}`}>{topSeverity}</span>
-                <div className="intel-type-info">
-                  <strong>{type}</strong>
-                  <span>{count} alerts · {currencyFmt.format(revenue)}</span>
-                </div>
-                <ChevronRight size={12} />
-              </button>
-            ))}
-          </aside>
+        {/* KPI strip */}
+        <div className="board-kpi-strip">
+          {[
+            {
+              label: 'Avg Fill Rate',
+              value: `${intelKpis.fillRate.toFixed(1)}%`,
+              sub: intelKpis.fillRate >= 85 ? 'On target (≥85%)' : 'Below target',
+              status: intelKpis.fillRate >= 85 ? 'good' : 'warn',
+              icon: <TrendingUp size={14} />,
+            },
+            {
+              label: 'Video Completion Rate',
+              value: `${intelKpis.vcr.toFixed(1)}%`,
+              sub: intelKpis.vcr >= 70 ? 'Healthy engagement' : 'Needs attention',
+              status: intelKpis.vcr >= 70 ? 'good' : 'warn',
+              icon: <MonitorPlay size={14} />,
+            },
+            {
+              label: 'VAST SLA Compliance',
+              value: `${intelKpis.slaComp.toFixed(1)}%`,
+              sub: 'Latency < 1800ms threshold',
+              status: intelKpis.slaComp >= 90 ? 'good' : intelKpis.slaComp >= 70 ? 'warn' : 'bad',
+              icon: <Zap size={14} />,
+            },
+            {
+              label: 'Revenue Efficiency',
+              value: `${intelKpis.revEff.toFixed(1)}%`,
+              sub: `${currencyFmt.format(intelKpis.atRisk)} at risk of ${currencyFmt.format(intelKpis.totalRev)}`,
+              status: intelKpis.revEff >= 90 ? 'good' : intelKpis.revEff >= 75 ? 'warn' : 'bad',
+              icon: <CircleDollarSign size={14} />,
+            },
+          ].map((kpi) => (
+            <div key={kpi.label} className={`board-kpi-tile board-kpi-${kpi.status}`}>
+              <div className="board-kpi-top">{kpi.icon}<span className="board-kpi-label">{kpi.label}</span></div>
+              <div className="board-kpi-value">{kpi.value}</div>
+              <div className="board-kpi-sub">{kpi.sub}</div>
+            </div>
+          ))}
+        </div>
 
-          {/* Right: analysis panel */}
-          <div className="intel-main">
-            {selectedIntelAlert ? (() => {
-              const alert = selectedIntelAlert
-              const pb    = AGENT_PLAYBOOK[alert.alert_type]
-              const dec   = reviewDecisions[alert.alert_id]
-              if (!pb) return <div className="intel-empty">No agent playbook available for this alert type.</div>
-              return (
-                <div className={`session-card ${dec ?? ''}`}>
-                  <div className="session-head">
-                    <div className="session-meta">
-                      <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
-                      <strong>{alert.alert_type}</strong>
-                      <span className="session-sub">{alert.campaign_name} · {alert.platform_name}</span>
-                    </div>
-                    <div className="session-right">
-                      <span className="session-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))} at risk</span>
-                      {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={12} /> Approved &amp; Deployed</span>}
-                      {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={12} /> Rejected</span>}
-                      {!dec              && <span className="dec-badge pending"><Bot size={12} /> Awaiting Review</span>}
-                    </div>
-                  </div>
+        {/* Charts row */}
+        <div className="board-charts-row">
+          {/* Fill rate + VCR over 24h */}
+          <div className="board-chart-card board-chart-wide">
+            <div className="board-chart-head">
+              <span className="board-chart-title"><Activity size={13} /> Fill Rate &amp; Completion Rate — 24h Trend</span>
+              <div className="board-legend">
+                <span className="legend-dot" style={{ background: '#FF5800' }} /> Fill Rate
+                <span className="legend-dot" style={{ background: '#22c55e' }} /> VCR
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={hourlyEngagement} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#FF5800" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradVcr" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} domain={[0, 100]} unit="%" />
+                <Tooltip
+                  contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
+                  formatter={(val: number, name: string) => [`${val.toFixed(1)}%`, name === 'fillRate' ? 'Fill Rate' : 'VCR']}
+                />
+                <Area type="monotone" dataKey="fillRate" stroke="#FF5800" strokeWidth={2} fill="url(#gradFill)" dot={false} />
+                <Area type="monotone" dataKey="vcr"      stroke="#22c55e" strokeWidth={2} fill="url(#gradVcr)"  dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
 
-                  {/* Agent steps */}
-                  <div className="agent-steps">
-                    {pb.steps.map((step, i) => (
-                      <div className={`agent-step step-anim-${i}`} key={step.tool}>
-                        <div className="step-icon">
-                          {step.icon === 'search'   && <Search   size={12} />}
-                          {step.icon === 'database' && <Database size={12} />}
-                          {step.icon === 'terminal' && <Terminal size={12} />}
-                          {step.icon === 'activity' && <Activity size={12} />}
-                          {step.icon === 'zap'      && <Zap      size={12} />}
-                        </div>
-                        <div className="step-body">
-                          <code className="step-tool">{step.tool}()</code>
-                          <span className="step-desc">{step.desc}</span>
-                          <span className="step-result">→ {step.result}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Root cause */}
-                  <div className="session-rca">
-                    <div className="rca-label"><Bot size={12} /> Root Cause</div>
-                    <p>{pb.rootCause}</p>
-                    <div className="confidence">Confidence: <strong>{buildRca(alert).confidence}%</strong></div>
-                  </div>
-
-                  {/* Fix artifact */}
-                  <div className="session-fix">
-                    <div className="fix-head">
-                      <Terminal size={12} /> <span>Proposed Fix</span>
-                      <span className="fix-type-badge">{pb.fixType}</span>
-                      <span className="fix-recovery">Est. recovery: {pb.recoveryTime}</span>
-                    </div>
-                    <pre className="fix-code">{pb.fixCode}</pre>
-                  </div>
-
-                  {/* Actions */}
-                  {!dec && (
-                    <div className="session-actions">
-                      <button className="btn-approve" type="button"
-                        onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
-                        <CheckCircle2 size={14} /> Approve &amp; Deploy
-                      </button>
-                      <button className="btn-reject" type="button"
-                        onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
-                        <XCircle size={14} /> Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })() : (
-              <div className="intel-empty">Select an alert type to view analysis</div>
-            )}
+          {/* Platform fill rate comparison */}
+          <div className="board-chart-card board-chart-narrow">
+            <div className="board-chart-head">
+              <span className="board-chart-title"><MonitorPlay size={13} /> Platform Fill Rate</span>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={platformPerformance} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} unit="%" domain={[0, 100]} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} width={80} />
+                <Tooltip
+                  contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
+                  formatter={(val: number) => [`${val.toFixed(1)}%`, 'Fill Rate']}
+                />
+                <Bar dataKey="fillRate" radius={[0, 4, 4, 0]}>
+                  {platformPerformance.map((_, i) => (
+                    <Cell key={i} fill={i === 0 ? '#FF5800' : i === 1 ? '#FF8C42' : '#FFB347'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
+
+        {/* AI Insight cards */}
+        <div className="board-insights-row">
+          {[
+            {
+              icon: <TrendingUp size={15} />,
+              title: 'Delivery Momentum',
+              color: '#FF5800',
+              body: (() => {
+                const avgFill = intelKpis.fillRate
+                const trend   = hourlyEngagement.length >= 4
+                  ? hourlyEngagement.slice(-4).reduce((s, r) => s + r.fillRate, 0) / 4
+                  : avgFill
+                const dir = trend > avgFill ? 'improving' : trend < avgFill - 3 ? 'declining' : 'stable'
+                return `Fill rate is ${dir} over the last 4 hours (${trend.toFixed(1)}% vs ${avgFill.toFixed(1)}% 24h avg). ${avgFill >= 85 ? 'Delivery is on pace with no action required.' : 'Below the 85% target — consider inventory reallocation or frequency cap adjustment.'}`
+              })(),
+              stat: `${intelKpis.fillRate.toFixed(1)}% fill`,
+            },
+            {
+              icon: <MonitorPlay size={15} />,
+              title: 'Engagement Health',
+              color: '#22c55e',
+              body: (() => {
+                const vcr = intelKpis.vcr
+                const top = topCampaignsByVcr[0]
+                if (!top) return 'Insufficient VCR data for this period.'
+                return `Video completion rate is ${vcr.toFixed(1)}% across all active campaigns. Top performer is ${top.campaign.campaign_name} at ${top.vcr.toFixed(1)}% VCR. ${vcr >= 70 ? 'Audience engagement is healthy — creatives are resonating.' : 'VCR is below benchmark (70%). Review creative length and targeting to improve completions.'}`
+              })(),
+              stat: `${intelKpis.vcr.toFixed(1)}% VCR`,
+            },
+            {
+              icon: <CircleDollarSign size={15} />,
+              title: 'Spend Efficiency',
+              color: '#6366f1',
+              body: (() => {
+                const eff  = intelKpis.revEff
+                const risk = intelKpis.atRisk
+                const total = intelKpis.totalRev
+                return `${currencyFmt.format(risk)} of ${currencyFmt.format(total)} total committed revenue is at risk — a ${(100 - eff).toFixed(1)}% exposure. ${eff >= 90 ? 'Spend efficiency is strong. Monitor underperforming segments to maintain trajectory.' : 'Efficiency below 90% threshold. Prioritize reallocating budget away from underdelivering line items to protected inventory.'}`
+              })(),
+              stat: `${intelKpis.revEff.toFixed(1)}% efficient`,
+            },
+          ].map((card) => (
+            <div key={card.title} className="board-insight-card">
+              <div className="board-insight-head" style={{ color: card.color }}>
+                {card.icon}
+                <strong>{card.title}</strong>
+                <span className="board-insight-stat" style={{ background: `${card.color}18`, color: card.color }}>{card.stat}</span>
+              </div>
+              <p className="board-insight-body">{card.body}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Top campaigns by VCR table */}
+        <div className="board-table-card">
+          <div className="board-chart-head">
+            <span className="board-chart-title"><Table2 size={13} /> Top Campaigns by Video Completion Rate</span>
+            <span className="board-table-sub">Ranked by VCR · Active campaigns only</span>
+          </div>
+          <table className="board-perf-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Campaign</th>
+                <th>Platform</th>
+                <th>Fill Rate</th>
+                <th>VCR</th>
+                <th>Delivery</th>
+                <th>Error Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topCampaignsByVcr.map((row, i) => (
+                <tr key={row.campaign.campaign_id}>
+                  <td className="board-rank">{i + 1}</td>
+                  <td>
+                    <div className="board-camp-name">{row.campaign.campaign_name}</div>
+                    <div className="board-camp-adv">{row.advertiser_name}</div>
+                  </td>
+                  <td><span className="board-platform-tag">{row.platform_name}</span></td>
+                  <td>
+                    <div className="board-meter-wrap">
+                      <div className="board-meter-bar" style={{ width: `${Math.min(row.fillRate, 100)}%`, background: row.fillRate >= 85 ? '#22c55e' : row.fillRate >= 70 ? '#FF8C42' : '#ef4444' }} />
+                      <span>{row.fillRate.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="board-meter-wrap">
+                      <div className="board-meter-bar" style={{ width: `${Math.min(row.vcr, 100)}%`, background: '#6366f1' }} />
+                      <span>{row.vcr.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`board-rate-chip ${row.deliveryRate >= 90 ? 'good' : row.deliveryRate >= 70 ? 'warn' : 'bad'}`}>
+                      {row.deliveryRate.toFixed(0)}%
+                    </span>
+                  </td>
+                  <td className="board-error-cell">
+                    {row.errorRate > 2
+                      ? <span className="board-rate-chip bad">{row.errorRate.toFixed(1)}%</span>
+                      : <span className="board-rate-chip good">{row.errorRate.toFixed(1)}%</span>
+                    }
+                  </td>
+                </tr>
+              ))}
+              {topCampaignsByVcr.length === 0 && (
+                <tr><td colSpan={7} className="board-empty-row">No active campaign performance data loaded</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
       </main>
       )}
 
