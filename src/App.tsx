@@ -898,30 +898,6 @@ function App() {
 
 
 
-  // ── Intelligence Board: hourly fill rate + completion rate over last 24h
-  const hourlyEngagement = useMemo(() => {
-    if (!last24Rows.length) return []
-    const byHour = new Map<string, { req: number; resp: number; compl: number; del: number; err: number }>()
-    for (const row of last24Rows) {
-      const slot = row.log_hour.slice(11, 16)
-      const prev = byHour.get(slot) ?? { req: 0, resp: 0, compl: 0, del: 0, err: 0 }
-      prev.req   += row.vast_requests
-      prev.resp  += row.vast_responses
-      prev.compl += row.video_completes
-      prev.del   += row.impressions_delivered
-      prev.err   += row.error_count
-      byHour.set(slot, prev)
-    }
-    return [...byHour.keys()].sort().map((hour) => {
-      const r = byHour.get(hour)!
-      return {
-        hour,
-        fillRate:   r.req  > 0 ? Math.round((r.resp  / r.req) * 1000) / 10 : 0,
-        vcr:        r.del  > 0 ? Math.round((r.compl / r.del) * 1000) / 10 : 0,
-        errorRate:  r.req  > 0 ? Math.round((r.err   / r.req) * 1000) / 10 : 0,
-      }
-    })
-  }, [last24Rows])
 
   // ── Intelligence Board: fill rate + VCR by platform
   const platformPerformance = useMemo(() => {
@@ -968,13 +944,6 @@ function App() {
     return { fillRate, vcr, slaComp, revEff, totalRev, atRisk }
   }, [last24Rows, campaigns, enrichedAlerts])
 
-  // ── Intelligence Board: top campaigns by VCR for table
-  const topCampaignsByVcr = useMemo(() => {
-    return campaignHealth
-      .filter((c) => c.vcr > 0)
-      .sort((a, b) => b.vcr - a.vcr)
-      .slice(0, 8)
-  }, [campaignHealth])
 
   // ── Intelligence Board: all distinct platform names
   const intelPlatformNames = useMemo(() => {
@@ -1385,7 +1354,7 @@ function App() {
                   </div>
                   <div className="arw-risk-line">
                     {shortfall > 0
-                      ? <><AlertTriangle size={10} /> {compactFmt.format(shortfall)} imp shortfall · {currencyFmt.format(h.revenueAtRisk ?? 0)} at risk</>
+                      ? <><AlertTriangle size={10} /> {compactFmt.format(shortfall)} imp shortfall · {currencyFmt.format(revenueAtRisk)} at risk</>
                       : <><AlertTriangle size={10} /> {h.alertCount} active alert{h.alertCount !== 1 ? 's' : ''}</>
                     }
                   </div>
