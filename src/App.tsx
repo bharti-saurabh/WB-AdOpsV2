@@ -53,16 +53,41 @@ const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency
 // ─── AGENT PLAYBOOK ─────────────────────────────────────────────────────────
 
 const AGENT_PLAYBOOK: Record<string, {
-  steps: { tool: string; icon: string; desc: string; result: string }[]
+  steps: { tool: string; icon: string; desc: string; result: string; thought: string; query: string }[]
   rootCause: string; fixType: string; fixCode: string; recoveryTime: string
 }> = {
   'Empty Audience Segment': {
     steps: [
-      { tool: 'query_performance_log',    icon: 'search',   desc: 'Scanning delivery metrics (last 6h)',           result: 'impressions_delivered: 0 for 4 consecutive hours' },
-      { tool: 'query_audience_segments',  icon: 'database', desc: 'Checking segment sync status: SEG-001',         result: 'sync_status: Failed — last sync 36h ago' },
-      { tool: 'query_dmp_connector_logs', icon: 'terminal', desc: 'Fetching DMP connector error telemetry',        result: '404_SEGMENT_NOT_FOUND in MAX_IDENTITY_GRAPH' },
-      { tool: 'correlate_campaigns',      icon: 'activity', desc: 'Identifying all campaigns sharing this segment', result: '3 campaigns affected — all delivery halted' },
-      { tool: 'generate_resolution',      icon: 'zap',      desc: 'Generating fix artifact',                       result: 'Re-map segment + force sync + replay 4h window' },
+      {
+        tool: 'query_performance_log', icon: 'search',
+        desc: 'Scanning delivery metrics (last 6h)', result: 'impressions_delivered: 0 for 4 consecutive hours',
+        thought: 'The alert shows zero impressions. My first step is to confirm the outage window by querying hourly delivery totals — if impressions are consistently zero this rules out a one-off blip and points to a structural break.',
+        query: `import pandas as pd\nfrom wb_data import performance_log\n\ndf = performance_log.load(hours=6)\ncampaign_delivery = (\n    df[df['campaign_id'] == CAMPAIGN_ID]\n    .groupby('log_hour')['impressions_delivered']\n    .sum()\n    .reset_index()\n)\nprint(campaign_delivery)`,
+      },
+      {
+        tool: 'query_audience_segments', icon: 'database',
+        desc: 'Checking segment sync status: SEG-001', result: 'sync_status: Failed — last sync 36h ago',
+        thought: 'With zero delivery confirmed, the most likely cause is the audience segment failing to populate — no eligible users means no bids win. I\'ll check the segment sync status directly against the DMP store.',
+        query: `from wb_data import audience_segments\n\nseg = audience_segments.get(segment_id='SEG-001')\nprint(f"Status: {seg['sync_status']}")\nprint(f"Last sync: {seg['last_sync_ts']}")\nprint(f"Cardinality: {seg['estimated_reach']:,}")`,
+      },
+      {
+        tool: 'query_dmp_connector_logs', icon: 'terminal',
+        desc: 'Fetching DMP connector error telemetry', result: '404_SEGMENT_NOT_FOUND in MAX_IDENTITY_GRAPH',
+        thought: 'Sync status is Failed. I need to determine why — was it a network error, a schema change, or the segment key being deleted on the upstream side? Pulling connector error logs will tell me the exact error code.',
+        query: `from wb_data import dmp_connector_logs\n\nlogs = dmp_connector_logs.query(\n    segment_id='SEG-001',\n    since_hours=48,\n    level='ERROR'\n)\nfor log in logs:\n    print(f"[{log['ts']}] {log['error_code']}: {log['message']}")`,
+      },
+      {
+        tool: 'correlate_campaigns', icon: 'activity',
+        desc: 'Identifying all campaigns sharing this segment', result: '3 campaigns affected — all delivery halted',
+        thought: 'The error is 404 on the identity graph — not a transient network failure. Before generating a fix, I need to know blast radius: how many campaigns reference SEG-001? A shared segment failure could be wider than this single alert.',
+        query: `from wb_data import campaigns\n\naffected = campaigns.filter(\n    segment_id='SEG-001',\n    status='Active'\n)\nprint(f"Affected campaigns: {len(affected)}")\nfor c in affected:\n    print(f"  {c['campaign_id']} — {c['campaign_name']}")`,
+      },
+      {
+        tool: 'generate_resolution', icon: 'zap',
+        desc: 'Generating fix artifact', result: 'Re-map segment + force sync + replay 4h window',
+        thought: 'Three campaigns halted. The fix is: (1) re-map SEG-001 to the v2 identity graph which doesn\'t return 404, (2) force a sync to rebuild cardinality, (3) replay the 4-hour delivery window to recover lost impressions. I\'ll generate the deployment artifact now.',
+        query: `from wb_fixes import segment_remediation\n\nplan = segment_remediation.build(\n    segment_id='SEG-001',\n    target_graph='MAX_IDENTITY_GRAPH_V2',\n    replay_hours=4,\n    affected_campaign_ids=[c['campaign_id'] for c in affected]\n)\nprint(plan.to_curl())`,
+      },
     ],
     rootCause: 'DMP segment SEG-001 failed identity graph sync 36 hours ago. MAX_IDENTITY_GRAPH returned 404_SEGMENT_NOT_FOUND, causing 0 eligible users across all campaigns using this segment. Auto-retry exhausted after 5 attempts with no recovery.',
     fixType: 'API Call',
@@ -84,11 +109,36 @@ curl -X POST https://adserver.warnermedia.internal/v1/delivery/replay \\
   },
   'DMP Segment Sync Failure': {
     steps: [
-      { tool: 'query_dmp_connector',   icon: 'terminal', desc: 'Fetching DMP ingest batch logs',                result: '502_UPSTREAM_TIMEOUT — taxonomy mismatch detected' },
-      { tool: 'query_segment_mapping', icon: 'database', desc: 'Checking external key taxonomy table',          result: '"Action_Enthusiasts" → unmapped in taxonomy v3.1' },
-      { tool: 'query_eligibility',     icon: 'search',   desc: 'Checking campaign targeting eligibility',       result: '0 eligible impressions in queue' },
-      { tool: 'query_snapshot',        icon: 'activity', desc: 'Finding last known-good sync snapshot',         result: 'Snapshot 2024-07-14 08:00 UTC available' },
-      { tool: 'generate_resolution',   icon: 'zap',      desc: 'Generating config patch + re-ingest job',       result: 'Taxonomy patch + connector retry with fallback' },
+      {
+        tool: 'query_dmp_connector', icon: 'terminal',
+        desc: 'Fetching DMP ingest batch logs', result: '502_UPSTREAM_TIMEOUT — taxonomy mismatch detected',
+        thought: 'The alert indicates a DMP sync failure. I need to start at the ingest pipeline — the batch connector logs will tell me whether this is a timeout, schema error, or auth failure.',
+        query: `from wb_data import dmp_connector_logs\n\nlogs = dmp_connector_logs.query(\n    connector_id='dmp-ingest-batch',\n    since_hours=24,\n    level=['ERROR', 'WARN']\n)\nfor log in logs[-10:]:\n    print(f"[{log['ts']}] {log['status_code']}: {log['message']}")`,
+      },
+      {
+        tool: 'query_segment_mapping', icon: 'database',
+        desc: 'Checking external key taxonomy table', result: '"Action_Enthusiasts" → unmapped in taxonomy v3.1',
+        thought: '502 timeout with "taxonomy mismatch" in the message. I need to inspect the taxonomy mapping table to find which external key is failing the lookup. A null mapping causes the upstream DMP to reject the entire batch.',
+        query: `from wb_data import dmp_taxonomy\n\nmapping = dmp_taxonomy.lookup(\n    key='Action_Enthusiasts',\n    version='v3.1'\n)\nprint(f"Mapped value: {mapping}")\nprint(f"Current taxonomy version: {dmp_taxonomy.current_version()}")`,
+      },
+      {
+        tool: 'query_eligibility', icon: 'search',
+        desc: 'Checking campaign targeting eligibility', result: '0 eligible impressions in queue',
+        thought: 'The key is unmapped. This will cause zero eligible users — but I want to confirm by checking the campaign\'s actual eligibility queue to quantify the delivery impact.',
+        query: `from wb_data import ad_eligibility\n\nqueue = ad_eligibility.check_campaign(\n    campaign_id=CAMPAIGN_ID,\n    check_segment=True\n)\nprint(f"Eligible impressions in queue: {queue['eligible_count']:,}")\nprint(f"Rejection reason: {queue['rejection_reason']}")`,
+      },
+      {
+        tool: 'query_snapshot', icon: 'activity',
+        desc: 'Finding last known-good sync snapshot', result: 'Snapshot 2024-07-14 08:00 UTC available',
+        thought: 'Eligibility is zero — confirmed delivery impact. Before pushing a patch, I need to find a safe rollback snapshot so the retry job can seed from known-good data while the taxonomy fix propagates.',
+        query: `from wb_data import dmp_snapshots\n\nsnaps = dmp_snapshots.list_available(\n    segment_id='SEG-001',\n    status='healthy'\n)\nlatest = snaps[0]\nprint(f"Latest good snapshot: {latest['snapshot_ts']}")\nprint(f"Cardinality: {latest['reach_estimate']:,}")`,
+      },
+      {
+        tool: 'generate_resolution', icon: 'zap',
+        desc: 'Generating config patch + re-ingest job', result: 'Taxonomy patch + connector retry with fallback',
+        thought: 'I have everything I need: the bad key, the correct mapping in v3.2, and a valid fallback snapshot. I\'ll patch the configmap to add the missing key mapping and spawn a retry job seeded from the snapshot.',
+        query: `from wb_fixes import dmp_taxonomy_patch\n\npatch = dmp_taxonomy_patch.build(\n    key='Action_Enthusiasts',\n    value='action_sports_v32',\n    target_version='3.2',\n    fallback_snapshot=latest['snapshot_ts'],\n    segment_id='SEG-001'\n)\nprint(patch.to_kubectl())`,
+      },
     ],
     rootCause: 'DMP connector taxonomy mapping is mismatched — v3.1 vs expected v3.2. External key "Action_Enthusiasts" resolves to null in the current mapping table, causing 502 upstream timeouts during ingest batch processing. 5 retries exhausted.',
     fixType: 'Config Patch',
@@ -106,11 +156,36 @@ kubectl create job --from=cronjob/dmp-ingest-batch dmp-ingest-retry-$(date +%s) 
   },
   'VAST Timeout': {
     steps: [
-      { tool: 'query_fill_rate',      icon: 'search',   desc: 'Analyzing VAST request/response ratios',       result: 'Fill rate: 94% → 61% over last 2h' },
-      { tool: 'query_latency',        icon: 'activity', desc: 'Checking decision engine response times',       result: 'p99 latency: 2840ms  (SLA: 1800ms)' },
-      { tool: 'query_cdn_health',     icon: 'terminal', desc: 'Inspecting CDN node health telemetry',          result: 'CDN node us-east-2b: 43% packet loss' },
-      { tool: 'identify_fallback',    icon: 'database', desc: 'Locating backup ad decision endpoint',          result: 'adserver-2.warnermedia.internal — healthy' },
-      { tool: 'generate_resolution',  icon: 'zap',      desc: 'Generating failover config patch',              result: 'Timeout reduction + CDN failover routing' },
+      {
+        tool: 'query_fill_rate', icon: 'search',
+        desc: 'Analyzing VAST request/response ratios', result: 'Fill rate: 94% → 61% over last 2h',
+        thought: 'VAST timeout alert — I need to first quantify the fill rate degradation to establish the timeline. If fill rate dropped sharply, the issue is likely server-side rather than creative-side.',
+        query: `from wb_data import vast_logs\nimport pandas as pd\n\ndf = vast_logs.load(hours=4)\nhourly = (\n    df.groupby('hour')\n    .agg(requests=('vast_req','sum'), responses=('vast_resp','sum'))\n    .assign(fill_rate=lambda x: x.responses / x.requests * 100)\n)\nprint(hourly)`,
+      },
+      {
+        tool: 'query_latency', icon: 'activity',
+        desc: 'Checking decision engine response times', result: 'p99 latency: 2840ms  (SLA: 1800ms)',
+        thought: 'Fill rate dropped 33 points in 2 hours — that\'s abrupt. This points to latency, not bid pressure. I\'ll pull p99 latency from the decision engine to see if it\'s breaching the 1800ms SLA.',
+        query: `from wb_data import adserver_metrics\n\nlatency = adserver_metrics.percentiles(\n    endpoint='vast_decision',\n    window_minutes=120,\n    percentiles=[50, 90, 95, 99]\n)\nprint(f"p50: {latency['p50']}ms")\nprint(f"p99: {latency['p99']}ms (SLA: 1800ms)")`,
+      },
+      {
+        tool: 'query_cdn_health', icon: 'terminal',
+        desc: 'Inspecting CDN node health telemetry', result: 'CDN node us-east-2b: 43% packet loss',
+        thought: 'p99 at 2840ms — well above SLA. The decision engine itself is healthy on other endpoints so the bottleneck is upstream. I\'ll check CDN node health to see if packet loss on a specific node is causing connection drops.',
+        query: `from wb_infra import cdn_health\n\nnodes = cdn_health.get_node_status(region='us-east')\nfor node in nodes:\n    print(\n        f"{node['node_id']}: "\n        f"packet_loss={node['packet_loss_pct']:.1f}% "\n        f"status={node['status']}"\n    )`,
+      },
+      {
+        tool: 'identify_fallback', icon: 'database',
+        desc: 'Locating backup ad decision endpoint', result: 'adserver-2.warnermedia.internal — healthy',
+        thought: 'us-east-2b at 43% packet loss explains everything — requests routed through that node are timing out. I need to verify adserver-2 is healthy and can absorb the traffic before I route failover.',
+        query: `from wb_infra import adserver_health\n\nfallback = adserver_health.check(\n    endpoint='adserver-2.warnermedia.internal',\n    probe_count=5\n)\nprint(f"Status: {fallback['status']}")\nprint(f"Avg latency: {fallback['avg_latency_ms']}ms")\nprint(f"Capacity headroom: {fallback['capacity_pct']}%")`,
+      },
+      {
+        tool: 'generate_resolution', icon: 'zap',
+        desc: 'Generating failover config patch', result: 'Timeout reduction + CDN failover routing',
+        thought: 'Fallback is healthy with headroom. My fix is a two-part config patch: reduce the VAST timeout threshold to 1800ms to fail-fast instead of waiting 3s, and set adserver-2 as active failover endpoint with 20% packet-loss as the auto-trigger threshold.',
+        query: `from wb_fixes import adserver_routing\n\npatch = adserver_routing.failover_patch(\n    primary='adserver-1.warnermedia.internal',\n    fallback='adserver-2.warnermedia.internal',\n    vast_timeout_ms=1800,\n    failover_threshold_pct=20,\n    cdn_exclude_nodes=['us-east-2b']\n)\nprint(patch.to_kubectl_configmap())`,
+      },
     ],
     rootCause: 'CDN node us-east-2b is degraded (43% packet loss), pushing VAST response latency above the 1800ms SLA. Primary decision engine times out before returning valid ad pods, resulting in slate insertion across affected campaigns.',
     fixType: 'Config Update',
@@ -131,11 +206,36 @@ EOF`,
   },
   'Roku Transcode Risk': {
     steps: [
-      { tool: 'query_creative_specs',  icon: 'search',   desc: 'Fetching creative bitrate profiles',           result: 'CMP creative: 18,500 kbps — Roku max: 15,000 kbps' },
-      { tool: 'query_device_cohort',   icon: 'database', desc: 'Checking Roku household cohort size',           result: '~340K Roku devices targeted in this flight' },
-      { tool: 'query_asset_store',     icon: 'terminal', desc: 'Checking transcoder pipeline for renditions',   result: 'No Roku-compatible rendition found in asset store' },
-      { tool: 'query_similar_assets',  icon: 'activity', desc: 'Finding compliant creatives in same family',    result: 'Creative 1 (VOD 12,147 kbps) — compatible' },
-      { tool: 'generate_resolution',   icon: 'zap',      desc: 'Generating transcode job + ingest rule',        result: 'Transcode to ≤15 Mbps + preflight enforcement' },
+      {
+        tool: 'query_creative_specs', icon: 'search',
+        desc: 'Fetching creative bitrate profiles', result: 'CMP creative: 18,500 kbps — Roku max: 15,000 kbps',
+        thought: 'Roku transcode risk alert. I need to retrieve the creative\'s bitrate profile first — the alert may be preemptive and I want to confirm the actual bitrate before assuming a violation.',
+        query: `from wb_data import creative_assets\n\ncreative = creative_assets.get(campaign_id=CAMPAIGN_ID)\nprint(f"Creative ID: {creative['asset_id']}")\nprint(f"Bitrate: {creative['bitrate_kbps']:,} kbps")\nprint(f"Codec: {creative['codec']}")\nprint(f"Resolution: {creative['resolution']}")`,
+      },
+      {
+        tool: 'query_device_cohort', icon: 'database',
+        desc: 'Checking Roku household cohort size', result: '~340K Roku devices targeted in this flight',
+        thought: 'Confirmed: 18,500 kbps exceeds Roku\'s AVC Level 4.1 max of 15,000 kbps. I need to quantify exposure — how many Roku devices are in this flight\'s audience? This determines urgency.',
+        query: `from wb_data import device_targeting\n\ncohort = device_targeting.estimate(\n    campaign_id=CAMPAIGN_ID,\n    device_type='roku'\n)\nprint(f"Estimated Roku households: {cohort['reach']:,}")\nprint(f"% of total flight audience: {cohort['share_pct']:.1f}%")`,
+      },
+      {
+        tool: 'query_asset_store', icon: 'terminal',
+        desc: 'Checking transcoder pipeline for renditions', result: 'No Roku-compatible rendition found in asset store',
+        thought: '340K Roku devices — significant exposure. Before triggering a transcode job, I should check if a compliant rendition already exists or is in-flight in the asset store.',
+        query: `from wb_data import asset_store\n\nrenditions = asset_store.list_renditions(\n    source_asset_id=creative['asset_id'],\n    device_profile='roku'\n)\nfor r in renditions:\n    print(f"{r['profile']}: {r['bitrate_kbps']} kbps — {r['status']}")`,
+      },
+      {
+        tool: 'query_similar_assets', icon: 'activity',
+        desc: 'Finding compliant creatives in same family', result: 'Creative 1 (VOD 12,147 kbps) — compatible',
+        thought: 'No Roku rendition exists. While the transcode job runs (35 min), I should find if there\'s an existing compliant creative in the same campaign family we can use as an interim fallback.',
+        query: `from wb_data import creative_assets\n\nfallbacks = creative_assets.find_compatible(\n    campaign_id=CAMPAIGN_ID,\n    device_profile='roku',\n    max_bitrate_kbps=15000\n)\nfor f in fallbacks:\n    print(f"{f['asset_id']}: {f['bitrate_kbps']} kbps — {f['label']}")`,
+      },
+      {
+        tool: 'generate_resolution', icon: 'zap',
+        desc: 'Generating transcode job + ingest rule', result: 'Transcode to ≤15 Mbps + preflight enforcement',
+        thought: 'Fallback found for interim use. Full fix: (1) dispatch high-priority transcode to two Roku-safe profiles, (2) add a preflight bitrate enforcement rule to prevent this class of issue recurring on ingest.',
+        query: `from wb_fixes import transcode_job\n\njob = transcode_job.create(\n    source_asset_id=creative['asset_id'],\n    profiles=['roku_avc_l41_14000kbps', 'roku_avc_l41_12000kbps'],\n    priority='high',\n    preflight_rule={\n        'enforce_on_ingest': True,\n        'max_bitrate_kbps': 15000,\n        'target_devices': ['roku']\n    }\n)\nprint(f"Job ID: {job['job_id']}")\nprint(f"ETA: {job['eta_minutes']} min")`,
+      },
     ],
     rootCause: 'Campaign creative bitrate (18,500 kbps) exceeds Roku AVC Level 4.1 maximum (15,000 kbps). No fallback rendition exists in asset store. Serving this creative will cause startup failures across ~340K Roku households in this flight.',
     fixType: 'Transcode Job',
@@ -158,11 +258,36 @@ EOF`,
   },
   'Delivery Drop': {
     steps: [
-      { tool: 'query_pacing_metrics',    icon: 'search',   desc: 'Computing delivery gap vs pacing target',     result: 'Actual delivery 34% below target (last 6h)' },
-      { tool: 'query_inventory_avails',  icon: 'database', desc: 'Checking available inventory on platform',    result: 'Prime-time sports break pods: 0 avails' },
-      { tool: 'query_cross_platform',    icon: 'activity', desc: 'Checking MAX/TBS/CNN+ inventory',             result: 'MAX premium: 28% available · TBS: 41% available' },
-      { tool: 'compute_budget_shift',    icon: 'terminal', desc: 'Calculating budget reallocation to recover',  result: 'Shift 12% budget → MAX + loosen freq cap by 1' },
-      { tool: 'generate_resolution',     icon: 'zap',      desc: 'Generating trafficking system update',        result: 'Cross-platform reallocation + make-good schedule' },
+      {
+        tool: 'query_pacing_metrics', icon: 'search',
+        desc: 'Computing delivery gap vs pacing target', result: 'Actual delivery 34% below target (last 6h)',
+        thought: 'Delivery drop alert. I need to quantify the gap precisely — is this a gradual drift or an abrupt drop? The pacing curve shape will tell me whether to look at inventory or system failures.',
+        query: `from wb_data import performance_log, campaigns\nimport pandas as pd\n\nc = campaigns.get(CAMPAIGN_ID)\nexp_per_hour = c['target_impressions'] / flight_hours(c)\n\ndf = performance_log.load(campaign_id=CAMPAIGN_ID, hours=6)\ndf['expected'] = exp_per_hour\ndf['gap_pct'] = (df['impressions_delivered'] - df['expected']) / df['expected'] * 100\nprint(df[['log_hour', 'impressions_delivered', 'expected', 'gap_pct']])`,
+      },
+      {
+        tool: 'query_inventory_avails', icon: 'database',
+        desc: 'Checking available inventory on platform', result: 'Prime-time sports break pods: 0 avails',
+        thought: '34% below target and the drop is gradual over 6 hours — this is inventory starvation, not a system failure. I\'ll check available break pods on the primary platform to confirm there\'s simply nothing to bid on.',
+        query: `from wb_data import inventory_avails\n\navails = inventory_avails.query(\n    platform_id=PLATFORM_ID,\n    break_type='prime_time_sports',\n    window_hours=12\n)\nprint(f"Available pods: {avails['pod_count']}")\nprint(f"Competing bids: {avails['competitor_density']:.1f}x")`,
+      },
+      {
+        tool: 'query_cross_platform', icon: 'activity',
+        desc: 'Checking MAX/TBS/CNN+ inventory', result: 'MAX premium: 28% available · TBS: 41% available',
+        thought: 'Zero prime-time avails confirmed. The campaign needs inventory but the primary platform is exhausted. I\'ll check cross-platform availability to find where we can spillover budget to recover pacing.',
+        query: `from wb_data import inventory_avails\n\nplatforms = ['MAX', 'TBS', 'CNN_PLUS']\nfor pid in platforms:\n    avails = inventory_avails.query(\n        platform_id=pid,\n        cpm_floor=CAMPAIGN_CPM * 0.9\n    )\n    print(f"{pid}: {avails['avail_pct']:.0f}% available")`,
+      },
+      {
+        tool: 'compute_budget_shift', icon: 'terminal',
+        desc: 'Calculating budget reallocation to recover', result: 'Shift 12% budget → MAX + loosen freq cap by 1',
+        thought: 'MAX and TBS both have meaningful inventory. I\'ll model a budget reallocation that recovers the delivery gap without overspending — I also want to check if the frequency cap is artificially constraining reach.',
+        query: `from wb_analytics import pacing_recovery\n\nplan = pacing_recovery.model(\n    campaign_id=CAMPAIGN_ID,\n    target_recovery_pct=95,\n    available_inventory={'MAX': 0.28, 'TBS': 0.41},\n    current_freq_cap=3\n)\nprint(f"Recommended MAX budget shift: {plan['max_shift_pct']:.0f}%")\nprint(f"Recommended freq cap: {plan['new_freq_cap']}")`,
+      },
+      {
+        tool: 'generate_resolution', icon: 'zap',
+        desc: 'Generating trafficking system update', result: 'Cross-platform reallocation + make-good schedule',
+        thought: 'Model shows 12% budget shift to MAX plus loosening freq cap from 3 to 4 should recover to 95% delivery. I\'ll generate the trafficking update and a make-good schedule for the shortfall window.',
+        query: `from wb_fixes import trafficking_update\n\nupdate = trafficking_update.build(\n    campaign_id=CAMPAIGN_ID,\n    budget_split={'primary': 0.88, 'MAX': 0.08, 'TBS': 0.04},\n    freq_cap={'impressions': 4, 'window': '24h'},\n    make_good={'enabled': True, 'recovery_target_pct': 95}\n)\nprint(update.to_api_payload())`,
+      },
     ],
     rootCause: 'Prime-time sports programming consumed all available ad break pods on this platform. Forecasted avails for next 12h remain near zero for targeted break types. Campaign is 34% behind delivery goal with 18h remaining in flight.',
     fixType: 'Trafficking Update',
@@ -185,11 +310,36 @@ EOF`,
   },
   'Prime-Time Underdelivery': {
     steps: [
-      { tool: 'query_linear_schedule',  icon: 'search',   desc: 'Checking live event schedule for overruns',   result: 'NBA playoff overran 38 min — 6 ad pods consumed' },
-      { tool: 'query_make_good_queue',  icon: 'database', desc: 'Checking make-good queue depth',               result: '42 spots queued · late-prime windows available' },
-      { tool: 'query_streaming_avails', icon: 'activity', desc: 'Checking streaming inventory for spillover',   result: 'MAX: 65K+ CPM-compatible avails in late-prime' },
-      { tool: 'compute_recovery',       icon: 'terminal', desc: 'Generating make-good schedule',                result: 'Distribute 42 spots: late-prime + MAX streaming' },
-      { tool: 'generate_resolution',    icon: 'zap',      desc: 'Generating make-good + spillover config',      result: 'Automated insertion + streaming overflow routing' },
+      {
+        tool: 'query_linear_schedule', icon: 'search',
+        desc: 'Checking live event schedule for overruns', result: 'NBA playoff overran 38 min — 6 ad pods consumed',
+        thought: 'Prime-time underdelivery during a live sports window. My first hypothesis is a live event overrun that consumed planned ad pods. I\'ll check the broadcast schedule for the affected window.',
+        query: `from wb_data import broadcast_schedule\n\nschedule = broadcast_schedule.query(\n    platform_id=PLATFORM_ID,\n    date=ALERT_DATE,\n    window='prime_time'\n)\nfor event in schedule:\n    print(\n        f"{event['title']}: "\n        f"planned_end={event['planned_end']} "\n        f"actual_end={event['actual_end']} "\n        f"overrun_min={event['overrun_minutes']}"\n    )`,
+      },
+      {
+        tool: 'query_make_good_queue', icon: 'database',
+        desc: 'Checking make-good queue depth', result: '42 spots queued · late-prime windows available',
+        thought: 'NBA ran 38 minutes over — that displaced 6 break pods. I need to check how many spots accumulated in the make-good queue and whether late-prime windows are available to clear them.',
+        query: `from wb_data import make_good_queue\n\nqueue = make_good_queue.get(\n    campaign_id=CAMPAIGN_ID,\n    status='pending'\n)\nprint(f"Queued spots: {len(queue)}")\n\navail_windows = make_good_queue.available_windows(\n    after=ALERT_DATE, hours=6\n)\nprint(f"Available late-prime windows: {len(avail_windows)}")`,
+      },
+      {
+        tool: 'query_streaming_avails', icon: 'activity',
+        desc: 'Checking streaming inventory for spillover', result: 'MAX: 65K+ CPM-compatible avails in late-prime',
+        thought: 'We have 42 spots queued and some late-prime windows, but linear alone may not be enough. I want to check MAX streaming inventory as a high-quality spillover option — CPM needs to match within tolerance.',
+        query: `from wb_data import inventory_avails\n\nmax_avails = inventory_avails.query(\n    platform_id='MAX',\n    time_window='late_prime',\n    cpm_floor=CAMPAIGN_CPM * 0.85,\n    content_rating=['TV-G', 'TV-PG', 'TV-14']\n)\nprint(f"MAX late-prime avails: {max_avails['count']:,}")\nprint(f"CPM range: ${max_avails['cpm_min']:.2f}–${max_avails['cpm_max']:.2f}")`,
+      },
+      {
+        tool: 'compute_recovery', icon: 'terminal',
+        desc: 'Generating make-good schedule', result: 'Distribute 42 spots: late-prime + MAX streaming',
+        thought: 'MAX has plenty of CPM-compatible avails. I\'ll now model the optimal spot distribution: maximize linear late-prime first (same audience, same commitments), then overflow to MAX for the remainder.',
+        query: `from wb_analytics import make_good_planner\n\nplan = make_good_planner.optimize(\n    queued_spots=42,\n    windows=avail_windows,\n    streaming_avails=max_avails,\n    priority='linear_first'\n)\nfor allocation in plan.allocations:\n    print(f"  {allocation['window']}: {allocation['spots']} spots on {allocation['platform']}")`,
+      },
+      {
+        tool: 'generate_resolution', icon: 'zap',
+        desc: 'Generating make-good + spillover config', result: 'Automated insertion + streaming overflow routing',
+        thought: 'Plan optimized: 32 spots into late-prime linear windows, 10 spots to MAX streaming. I\'ll generate the make-good payload with auto-overflow routing in case the linear windows fill up.',
+        query: `from wb_fixes import make_good_dispatch\n\nconfig = make_good_dispatch.build(\n    campaign_id=CAMPAIGN_ID,\n    schedule=plan.allocations,\n    auto_overflow={\n        'enabled': True,\n        'threshold_pct': 80,\n        'target': 'max_streaming'\n    }\n)\nprint(config.to_api_payload())`,
+      },
     ],
     rootCause: 'Live NBA playoff ran 38 minutes over schedule, consuming 6 planned ad break pods and pushing 42 spots into the make-good queue. Underdelivery is concentrated in the 18:00–21:00 window. Campaign is 22% behind daily target.',
     fixType: 'Make-Good Schedule',
@@ -587,6 +737,14 @@ function App() {
 
   // Data explorer preview
   const [previewTable, setPreviewTable] = useState<string | null>(null)
+  // Intelligence board platform tab
+  const [intelPlatform, setIntelPlatform] = useState<string>('All')
+  // Chat widget
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([
+    { role: 'ai', text: 'Hi! Ask me anything about campaign health, delivery pacing, alerts, or platform performance.' }
+  ])
   // Notifications agent state per alert
   const [agentState, setAgentState] = useState<Record<string, 'idle' | 'running' | 'complete'>>({})
   const [agentStep, setAgentStep] = useState<Record<string, number>>({})
@@ -818,6 +976,135 @@ function App() {
       .slice(0, 8)
   }, [campaignHealth])
 
+  // ── Intelligence Board: all distinct platform names
+  const intelPlatformNames = useMemo(() => {
+    const names = new Set(campaignHealth.map(h => h.platform_name).filter(Boolean))
+    return ['All', ...Array.from(names).sort()]
+  }, [campaignHealth])
+
+  // ── Intelligence Board: filtered data scoped to selected platform
+  const intelFilteredHealth = useMemo(() => {
+    if (intelPlatform === 'All') return campaignHealth
+    return campaignHealth.filter(h => h.platform_name === intelPlatform)
+  }, [campaignHealth, intelPlatform])
+
+  const intelFilteredRows = useMemo(() => {
+    if (intelPlatform === 'All') return last24Rows
+    return last24Rows.filter(row => {
+      const c = campaignMap[row.campaign_id]; if (!c) return false
+      return platformMap[c.platform_id]?.platform_name === intelPlatform
+    })
+  }, [last24Rows, intelPlatform, campaignMap, platformMap])
+
+  // ── Intelligence Board: KPIs scoped to platform
+  const intelPlatformKpis = useMemo(() => {
+    let req = 0, resp = 0, compl = 0, del = 0, slaPass = 0, slaTotal = 0
+    for (const row of intelFilteredRows) {
+      req   += row.vast_requests
+      resp  += row.vast_responses
+      compl += row.video_completes
+      del   += row.impressions_delivered
+      if (row.avg_latency_ms > 0) { slaTotal++; if (row.avg_latency_ms < 1800) slaPass++ }
+    }
+    const fillRate = req  > 0 ? (resp  / req)  * 100 : 0
+    const vcr      = del  > 0 ? (compl / del)  * 100 : 0
+    const slaComp  = slaTotal > 0 ? (slaPass / slaTotal) * 100 : 0
+    const pltCampaigns = intelFilteredHealth.length
+    const alertCount = intelFilteredHealth.reduce((s, h) => s + h.alertCount, 0)
+    const atRisk = intelPlatform === 'All' ? intelKpis.atRisk
+      : enrichedAlerts.filter(a => {
+          const c = campaignMap[a.campaign_id]
+          return c && platformMap[c.platform_id]?.platform_name === intelPlatform
+        }).reduce((s, a) => s + Number(a.revenue_impact_usd || 0), 0)
+    return { fillRate, vcr, slaComp, pltCampaigns, alertCount, atRisk }
+  }, [intelFilteredRows, intelFilteredHealth, intelPlatform, intelKpis.atRisk, enrichedAlerts, campaignMap, platformMap])
+
+  // ── Intelligence Board: AI platform summary text
+  const intelPlatformSummary = useMemo(() => {
+    const { fillRate, vcr, slaComp, pltCampaigns, alertCount, atRisk } = intelPlatformKpis
+    const name = intelPlatform === 'All' ? 'across all platforms' : `on ${intelPlatform}`
+    const fillHealth = fillRate >= 85 ? 'strong' : fillRate >= 70 ? 'moderate' : 'poor'
+    const vcrHealth  = vcr >= 70 ? 'healthy' : vcr >= 50 ? 'acceptable' : 'below benchmark'
+    const slaHealth  = slaComp >= 90 ? 'meeting SLA' : 'breaching SLA'
+    return `${pltCampaigns} active campaign${pltCampaigns !== 1 ? 's' : ''} ${name}. Fill rate is ${fillHealth} at ${fillRate.toFixed(1)}%, video completion is ${vcrHealth} at ${vcr.toFixed(1)}%, and VAST latency is ${slaHealth} (${slaComp.toFixed(1)}% of requests under 1800ms). ${alertCount > 0 ? `${alertCount} open alert${alertCount !== 1 ? 's' : ''} account for ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(atRisk)} in revenue exposure.` : 'No open alerts — platform health is normal.'} ${fillRate < 75 ? 'Recommend investigating inventory availability and targeting constraints.' : vcr < 50 ? 'Creative engagement is low — consider A/B testing shorter ad formats.' : 'No immediate action required.'}`
+  }, [intelPlatformKpis, intelPlatform])
+
+  // ── Intelligence Board: hourly engagement scoped to platform
+  const intelPlatformEngagement = useMemo(() => {
+    const byHour = new Map<string, { req: number; resp: number; compl: number; del: number; err: number }>()
+    for (const row of intelFilteredRows) {
+      const slot = row.log_hour.slice(11, 16)
+      const prev = byHour.get(slot) ?? { req: 0, resp: 0, compl: 0, del: 0, err: 0 }
+      prev.req   += row.vast_requests
+      prev.resp  += row.vast_responses
+      prev.compl += row.video_completes
+      prev.del   += row.impressions_delivered
+      prev.err   += row.error_count
+      byHour.set(slot, prev)
+    }
+    return [...byHour.keys()].sort().map((hour) => {
+      const r = byHour.get(hour)!
+      return {
+        hour,
+        fillRate:  r.req > 0 ? Math.round((r.resp  / r.req) * 1000) / 10 : 0,
+        vcr:       r.del > 0 ? Math.round((r.compl / r.del) * 1000) / 10 : 0,
+        errorRate: r.req > 0 ? Math.round((r.err   / r.req) * 1000) / 10 : 0,
+      }
+    })
+  }, [intelFilteredRows])
+
+  // ── Chat Q&A engine
+  const answerChat = useCallback((q: string): string => {
+    const lc = q.toLowerCase()
+
+    // Delivery / pacing
+    if (lc.includes('deliver') || lc.includes('pac')) {
+      const rate = topMetrics.avgDeliveryRate
+      const atRisk = campaignHealth.filter(h => h.deliveryRate < 90).length
+      return `Average delivery rate across all active campaigns is ${rate.toFixed(1)}%. ${atRisk} campaign${atRisk !== 1 ? 's are' : ' is'} below the 90% pacing guardrail. ${rate >= 90 ? 'Overall pacing is healthy.' : 'Recommend reviewing inventory avails and frequency caps on underperforming campaigns.'}`
+    }
+    // Fill rate
+    if (lc.includes('fill')) {
+      return `Average VAST fill rate is ${intelKpis.fillRate.toFixed(1)}% over the last 24 hours. ${intelKpis.fillRate >= 85 ? 'This is above the 85% target — ad serving infrastructure is performing well.' : 'This is below the 85% target. Check for CDN degradation or VAST timeout issues in the Notifications tab.'}`
+    }
+    // VCR / completion
+    if (lc.includes('vcr') || lc.includes('completion') || lc.includes('view') || lc.includes('engag')) {
+      const top = campaignHealth.filter(c => c.vcr > 0).sort((a,b) => b.vcr - a.vcr)[0]
+      return `Video completion rate is ${intelKpis.vcr.toFixed(1)}% across active campaigns. ${top ? `Best performer is ${top.campaign.campaign_name} at ${top.vcr.toFixed(1)}% VCR.` : ''} ${intelKpis.vcr >= 70 ? 'Audience engagement is healthy.' : 'Below the 70% benchmark — consider shorter creatives or tighter audience targeting.'}`
+    }
+    // Alerts
+    if (lc.includes('alert') || lc.includes('issue') || lc.includes('problem') || lc.includes('critical')) {
+      const crit = enrichedAlerts.filter(a => a.severity === 'Critical').length
+      const high = enrichedAlerts.filter(a => a.severity === 'High').length
+      return `There are ${enrichedAlerts.length} open alerts: ${crit} Critical, ${high} High, and ${enrichedAlerts.length - crit - high} Medium/Warning. Total revenue at risk is ${currencyFmt.format(topMetrics.revenueAtRisk)}. Head to the Notifications tab to review and resolve each alert.`
+    }
+    // Revenue
+    if (lc.includes('revenue') || lc.includes('risk') || lc.includes('money') || lc.includes('$')) {
+      return `${currencyFmt.format(topMetrics.revenueAtRisk)} of committed revenue is currently at risk from ${enrichedAlerts.length} unresolved alert${enrichedAlerts.length !== 1 ? 's' : ''}. Revenue efficiency is ${intelKpis.revEff.toFixed(1)}%. Approving agent-generated fixes in the Notifications tab is the fastest path to recovery.`
+    }
+    // Platform-specific
+    const pltMatch = platforms.find(p => lc.includes(p.platform_name.toLowerCase()))
+    if (pltMatch) {
+      const pHealth = campaignHealth.filter(h => h.platform_name === pltMatch.platform_name)
+      const avgDel = pHealth.length > 0 ? pHealth.reduce((s,h) => s + h.deliveryRate, 0) / pHealth.length : 0
+      const pAlerts = enrichedAlerts.filter(a => {
+        const c = campaignMap[a.campaign_id]
+        return c && platformMap[c.platform_id]?.platform_name === pltMatch.platform_name
+      })
+      return `${pltMatch.platform_name} has ${pHealth.length} active campaign${pHealth.length !== 1 ? 's' : ''} with an average delivery rate of ${avgDel.toFixed(1)}%. There are ${pAlerts.length} open alert${pAlerts.length !== 1 ? 's' : ''} impacting this platform.`
+    }
+    // Campaign-specific
+    const campMatch = campaigns.find(c => lc.includes(c.campaign_name.toLowerCase()))
+    if (campMatch) {
+      const h = campaignHealth.find(h => h.campaign.campaign_id === campMatch.campaign_id)
+      if (h) {
+        return `${campMatch.campaign_name}: delivery at ${h.deliveryRate.toFixed(1)}%, fill rate ${h.fillRate.toFixed(1)}%, VCR ${h.vcr.toFixed(1)}%, error rate ${h.errorRate.toFixed(2)}%. ${h.alertCount > 0 ? `${h.alertCount} open alert${h.alertCount !== 1 ? 's' : ''} — check the Notifications tab for details.` : 'No open alerts.'}`
+      }
+    }
+    // Fallback
+    return `I can answer questions about delivery pacing, fill rate, VCR, alerts, revenue at risk, and per-platform or per-campaign health. Try: "What's the fill rate?" or "How is MAX performing?"`
+  }, [topMetrics, intelKpis, campaignHealth, enrichedAlerts, platforms, campaigns, campaignMap, platformMap])
+
   // ── Preview data helper
   const getPreviewData = useCallback((tableName: string): Record<string, unknown>[] => {
     const map: Record<string, Record<string, unknown>[]> = {
@@ -1003,19 +1290,12 @@ function App() {
           </article>
         </section>
 
-        <section className="insight-banner">
-          <Sparkles size={18} />
-          <div className="insight-content">
-            <strong>AI Network Forecast — Next 6 Hours</strong>
-            <p>Cross-platform pacing analysis predicts <span className="insight-highlight">elevated underdelivery risk on linear live events</span>. Prime-time sports windows are forecasted near-zero avails. Recommend activating streaming spillover on {campaigns.filter(c => c.status === 'Active').length > 0 ? Math.min(3, Math.ceil(enrichedAlerts.length / 4)) : 2} campaigns to maintain pacing targets.</p>
-          </div>
-          <div className="insight-actions">
-            <button type="button" className="lightweight-toggle" onClick={() => setIsLightweightMode((p) => !p)}>
-              <span className="lt-label">{isLightweightMode ? '⚡ Fast Mode' : '📊 Full Data'}</span>
-              <span className="lt-desc">{isLightweightMode ? 'Sampling 1 in 8 rows — faster load' : 'Loading all performance rows'}</span>
-            </button>
-          </div>
-        </section>
+        <div className="overview-toolbar">
+          <button type="button" className="lightweight-toggle" onClick={() => setIsLightweightMode((p) => !p)}>
+            <span className="lt-label">{isLightweightMode ? '⚡ Fast Mode' : '📊 Full Data'}</span>
+            <span className="lt-desc">{isLightweightMode ? 'Sampling 1 in 8 rows — faster load' : 'Loading all performance rows'}</span>
+          </button>
+        </div>
 
         <section className="chart-card pacing-card clickable" onClick={() => setDrilldown('pacing')}>
           <div className="chart-title-row">
@@ -1069,20 +1349,50 @@ function App() {
             <h3>Campaigns at Risk — Delivery Below Target</h3>
             <button type="button" className="see-all-btn" onClick={() => setActiveTab('health')}>View All <ChevronRight size={12} /></button>
           </div>
-          <div className="at-risk-list">
-            {campaignHealth.filter(h => h.deliveryRate < 90).slice(0, 6).map(h => (
-              <div key={h.campaign.campaign_id} className="at-risk-row">
-                <div className="at-risk-meta">
-                  <span className="at-risk-name">{h.campaign.campaign_name}</span>
-                  <span className="at-risk-platform">{h.platform_name} · {h.advertiser_name}</span>
-                </div>
-                <div className="at-risk-bar-wrap">
-                  <div className="at-risk-bar" style={{ width: `${Math.max(2, h.deliveryRate)}%`, background: h.deliveryRate < 20 ? '#ef4444' : h.deliveryRate < 75 ? '#f59e0b' : '#FF5800' }} />
-                  <span style={{ color: h.deliveryRate < 20 ? '#ef4444' : h.deliveryRate < 75 ? '#f59e0b' : '#FF5800', fontSize: '0.78rem', fontWeight: 700 }}>{h.deliveryRate.toFixed(0)}%</span>
-                </div>
-                {h.alertCount > 0 && <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span>}
-              </div>
-            ))}
+          <div className="at-risk-widgets">
+            {campaignHealth.filter(h => h.deliveryRate < 90).slice(0, 6).map(h => {
+              const riskAlert = enrichedAlerts.find(a => a.campaign_id === h.campaign.campaign_id)
+              const riskColor = h.deliveryRate < 20 ? '#ef4444' : h.deliveryRate < 75 ? '#f59e0b' : '#FF5800'
+              const riskLabel = h.deliveryRate < 20 ? 'Critical' : h.deliveryRate < 75 ? 'At Risk' : 'Below Target'
+              const shortfall = h.recentRows.length > 0
+                ? Math.max(0, h.recentRows.reduce((s, r) => {
+                    const c = h.campaign; const exp = c.target_impressions / Math.max(1, flightHours(c))
+                    return s + (exp - r.impressions_delivered)
+                  }, 0))
+                : 0
+              return (
+                <button
+                  key={h.campaign.campaign_id}
+                  type="button"
+                  className="at-risk-widget"
+                  style={{ '--risk-color': riskColor } as React.CSSProperties}
+                  onClick={() => {
+                    if (riskAlert) { setActiveTab('notifications'); setExpandedAlert(riskAlert.alert_id) }
+                    else { setActiveTab('health') }
+                  }}
+                >
+                  <div className="arw-top">
+                    <span className="arw-risk-badge" style={{ background: `${riskColor}18`, color: riskColor, borderColor: `${riskColor}40` }}>{riskLabel}</span>
+                    {h.alertCount > 0 && <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span>}
+                  </div>
+                  <div className="arw-name">{h.campaign.campaign_name}</div>
+                  <div className="arw-meta">{h.platform_name} · {h.advertiser_name}</div>
+                  <div className="arw-bar-row">
+                    <div className="arw-bar-track">
+                      <div className="arw-bar-fill" style={{ width: `${Math.max(2, h.deliveryRate)}%`, background: riskColor }} />
+                    </div>
+                    <span className="arw-pct" style={{ color: riskColor }}>{h.deliveryRate.toFixed(0)}%</span>
+                  </div>
+                  <div className="arw-risk-line">
+                    {shortfall > 0
+                      ? <><AlertTriangle size={10} /> {compactFmt.format(shortfall)} imp shortfall · {currencyFmt.format(h.revenueAtRisk ?? 0)} at risk</>
+                      : <><AlertTriangle size={10} /> {h.alertCount} active alert{h.alertCount !== 1 ? 's' : ''}</>
+                    }
+                  </div>
+                  <div className="arw-cta">View in Notifications <ChevronRight size={10} /></div>
+                </button>
+              )
+            })}
             {campaignHealth.filter(h => h.deliveryRate < 90).length === 0 && (
               <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0', fontSize: '0.84rem' }}>All campaigns within pacing guardrails ✓</p>
             )}
@@ -1266,15 +1576,22 @@ function App() {
                         {pb.steps.map((step, i) => (
                           <div key={step.tool} className={`agent-step-live ${i < aStep ? 'done' : i === aStep ? 'active' : 'pending'}`}>
                             <div className="asl-icon">
-                              {step.icon === 'search'   && <Search   size={11} />}
-                              {step.icon === 'database' && <Database size={11} />}
-                              {step.icon === 'terminal' && <Terminal size={11} />}
-                              {step.icon === 'activity' && <Activity size={11} />}
-                              {step.icon === 'zap'      && <Zap      size={11} />}
+                              {i < aStep ? <CheckCircle2 size={11} /> : (
+                                <>
+                                  {step.icon === 'search'   && <Search   size={11} />}
+                                  {step.icon === 'database' && <Database size={11} />}
+                                  {step.icon === 'terminal' && <Terminal size={11} />}
+                                  {step.icon === 'activity' && <Activity size={11} />}
+                                  {step.icon === 'zap'      && <Zap      size={11} />}
+                                </>
+                              )}
                             </div>
                             <div className="asl-body">
                               <code>{step.tool}()</code>
                               <span>{step.desc}</span>
+                              {i === aStep && step.thought && (
+                                <span className="asl-thought"><Sparkles size={9} /> {step.thought}</span>
+                              )}
                               {i < aStep && <span className="asl-result">↳ {step.result}</span>}
                             </div>
                           </div>
@@ -1290,17 +1607,35 @@ function App() {
                 <div className="notif-analysis-pane">
                   {header}
 
-                  {/* Steps summary */}
+                  {/* Steps summary with thought process + Python query */}
                   <div className="nd-section fade-in-section" style={{ animationDelay: '0.1s' }}>
                     <div className="nd-label"><Bot size={13} /> Agent Steps Completed</div>
-                    <div className="agent-steps compact">
+                    <div className="agent-steps-detailed">
                       {pb.steps.map((step, i) => (
-                        <div className={`agent-step step-anim-${i}`} key={step.tool}>
-                          <div className="step-icon"><CheckCircle2 size={11} /></div>
-                          <div className="step-body">
-                            <code className="step-tool">{step.tool}()</code>
-                            <span className="step-result" style={{ color: 'var(--text-secondary)' }}>→ {step.result}</span>
+                        <div className={`asd-step step-anim-${i}`} key={step.tool}>
+                          <div className="asd-header">
+                            <div className="asd-check"><CheckCircle2 size={11} /></div>
+                            <div className="asd-main">
+                              <div className="asd-tool-row">
+                                <code className="step-tool">{step.tool}()</code>
+                                <span className="asd-step-num">Step {i + 1}</span>
+                              </div>
+                              <span className="asd-desc">{step.desc}</span>
+                              <span className="step-result">→ {step.result}</span>
+                            </div>
                           </div>
+                          {step.thought && (
+                            <div className="asd-thought">
+                              <span className="asd-thought-label"><Sparkles size={10} /> Agent Reasoning</span>
+                              <p>{step.thought}</p>
+                            </div>
+                          )}
+                          {step.query && (
+                            <div className="asd-query">
+                              <div className="asd-query-head"><Terminal size={10} /> Python Query</div>
+                              <pre className="asd-code">{step.query}</pre>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1586,38 +1921,67 @@ function App() {
               <p className="board-sub">AI-curated delivery analytics, engagement trends &amp; spend efficiency — last 24 hours</p>
             </div>
           </div>
-          <div className="board-refresh-badge"><Activity size={11} /> Live · auto-refreshes</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="board-refresh-badge"><Activity size={11} /> Live · auto-refreshes</div>
+            <button
+              type="button"
+              className="board-pdf-btn"
+              onClick={() => window.print()}
+            >
+              <Database size={12} /> Export PDF
+            </button>
+          </div>
         </div>
 
-        {/* KPI strip */}
+        {/* Platform tabs */}
+        <div className="board-platform-tabs">
+          {intelPlatformNames.map(name => (
+            <button
+              key={name}
+              type="button"
+              className={`board-plt-tab ${intelPlatform === name ? 'active' : ''}`}
+              onClick={() => setIntelPlatform(name)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+
+        {/* AI Platform Summary */}
+        <div className="board-ai-summary">
+          <div className="board-ai-icon"><Sparkles size={13} /></div>
+          <p>{intelPlatformSummary}</p>
+        </div>
+
+        {/* KPI strip — platform-scoped */}
         <div className="board-kpi-strip">
           {[
             {
               label: 'Avg Fill Rate',
-              value: `${intelKpis.fillRate.toFixed(1)}%`,
-              sub: intelKpis.fillRate >= 85 ? 'On target (≥85%)' : 'Below target',
-              status: intelKpis.fillRate >= 85 ? 'good' : 'warn',
+              value: `${intelPlatformKpis.fillRate.toFixed(1)}%`,
+              sub: intelPlatformKpis.fillRate >= 85 ? 'On target (≥85%)' : 'Below target',
+              status: intelPlatformKpis.fillRate >= 85 ? 'good' : 'warn',
               icon: <TrendingUp size={14} />,
             },
             {
               label: 'Video Completion Rate',
-              value: `${intelKpis.vcr.toFixed(1)}%`,
-              sub: intelKpis.vcr >= 70 ? 'Healthy engagement' : 'Needs attention',
-              status: intelKpis.vcr >= 70 ? 'good' : 'warn',
+              value: `${intelPlatformKpis.vcr.toFixed(1)}%`,
+              sub: intelPlatformKpis.vcr >= 70 ? 'Healthy engagement' : 'Needs attention',
+              status: intelPlatformKpis.vcr >= 70 ? 'good' : 'warn',
               icon: <MonitorPlay size={14} />,
             },
             {
               label: 'VAST SLA Compliance',
-              value: `${intelKpis.slaComp.toFixed(1)}%`,
+              value: `${intelPlatformKpis.slaComp.toFixed(1)}%`,
               sub: 'Latency < 1800ms threshold',
-              status: intelKpis.slaComp >= 90 ? 'good' : intelKpis.slaComp >= 70 ? 'warn' : 'bad',
+              status: intelPlatformKpis.slaComp >= 90 ? 'good' : intelPlatformKpis.slaComp >= 70 ? 'warn' : 'bad',
               icon: <Zap size={14} />,
             },
             {
-              label: 'Revenue Efficiency',
-              value: `${intelKpis.revEff.toFixed(1)}%`,
-              sub: `${currencyFmt.format(intelKpis.atRisk)} at risk of ${currencyFmt.format(intelKpis.totalRev)}`,
-              status: intelKpis.revEff >= 90 ? 'good' : intelKpis.revEff >= 75 ? 'warn' : 'bad',
+              label: 'Revenue at Risk',
+              value: currencyFmt.format(intelPlatformKpis.atRisk),
+              sub: `${intelPlatformKpis.alertCount} open alert${intelPlatformKpis.alertCount !== 1 ? 's' : ''}`,
+              status: intelPlatformKpis.atRisk === 0 ? 'good' : intelPlatformKpis.atRisk < 50000 ? 'warn' : 'bad',
               icon: <CircleDollarSign size={14} />,
             },
           ].map((kpi) => (
@@ -1641,7 +2005,7 @@ function App() {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={hourlyEngagement} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+              <AreaChart data={intelPlatformEngagement} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.18} />
@@ -1691,7 +2055,7 @@ function App() {
           </div>
         </div>
 
-        {/* AI Insight cards */}
+        {/* AI Insight cards — platform scoped */}
         <div className="board-insights-row">
           {[
             {
@@ -1699,38 +2063,38 @@ function App() {
               title: 'Delivery Momentum',
               color: '#FF5800',
               body: (() => {
-                const avgFill = intelKpis.fillRate
-                const trend   = hourlyEngagement.length >= 4
-                  ? hourlyEngagement.slice(-4).reduce((s, r) => s + r.fillRate, 0) / 4
+                const avgFill = intelPlatformKpis.fillRate
+                const trend   = intelPlatformEngagement.length >= 4
+                  ? intelPlatformEngagement.slice(-4).reduce((s, r) => s + r.fillRate, 0) / 4
                   : avgFill
                 const dir = trend > avgFill ? 'improving' : trend < avgFill - 3 ? 'declining' : 'stable'
                 return `Fill rate is ${dir} over the last 4 hours (${trend.toFixed(1)}% vs ${avgFill.toFixed(1)}% 24h avg). ${avgFill >= 85 ? 'Delivery is on pace with no action required.' : 'Below the 85% target — consider inventory reallocation or frequency cap adjustment.'}`
               })(),
-              stat: `${intelKpis.fillRate.toFixed(1)}% fill`,
+              stat: `${intelPlatformKpis.fillRate.toFixed(1)}% fill`,
             },
             {
               icon: <MonitorPlay size={15} />,
               title: 'Engagement Health',
               color: '#22c55e',
               body: (() => {
-                const vcr = intelKpis.vcr
-                const top = topCampaignsByVcr[0]
+                const vcr = intelPlatformKpis.vcr
+                const top = intelFilteredHealth.filter(c => c.vcr > 0).sort((a,b) => b.vcr - a.vcr)[0]
                 if (!top) return 'Insufficient VCR data for this period.'
-                return `Video completion rate is ${vcr.toFixed(1)}% across all active campaigns. Top performer is ${top.campaign.campaign_name} at ${top.vcr.toFixed(1)}% VCR. ${vcr >= 70 ? 'Audience engagement is healthy — creatives are resonating.' : 'VCR is below benchmark (70%). Review creative length and targeting to improve completions.'}`
+                return `Video completion rate is ${vcr.toFixed(1)}%${intelPlatform !== 'All' ? ` on ${intelPlatform}` : ''}. Top performer is ${top.campaign.campaign_name} at ${top.vcr.toFixed(1)}% VCR. ${vcr >= 70 ? 'Audience engagement is healthy — creatives are resonating.' : 'VCR is below benchmark (70%). Review creative length and targeting to improve completions.'}`
               })(),
-              stat: `${intelKpis.vcr.toFixed(1)}% VCR`,
+              stat: `${intelPlatformKpis.vcr.toFixed(1)}% VCR`,
             },
             {
               icon: <CircleDollarSign size={15} />,
-              title: 'Spend Efficiency',
+              title: 'Revenue Exposure',
               color: '#6366f1',
               body: (() => {
-                const eff  = intelKpis.revEff
-                const risk = intelKpis.atRisk
-                const total = intelKpis.totalRev
-                return `${currencyFmt.format(risk)} of ${currencyFmt.format(total)} total committed revenue is at risk — a ${(100 - eff).toFixed(1)}% exposure. ${eff >= 90 ? 'Spend efficiency is strong. Monitor underperforming segments to maintain trajectory.' : 'Efficiency below 90% threshold. Prioritize reallocating budget away from underdelivering line items to protected inventory.'}`
+                const risk = intelPlatformKpis.atRisk
+                const cnt  = intelPlatformKpis.alertCount
+                const scope = intelPlatform === 'All' ? 'across the network' : `on ${intelPlatform}`
+                return `${currencyFmt.format(risk)} is at risk ${scope} from ${cnt} open alert${cnt !== 1 ? 's' : ''}. ${risk === 0 ? 'No revenue exposure — all campaigns healthy.' : risk < 50000 ? 'Exposure is contained. Monitor active alerts to prevent escalation.' : 'Significant exposure detected. Prioritize resolving Critical and High severity alerts first to protect committed revenue.'}`
               })(),
-              stat: `${intelKpis.revEff.toFixed(1)}% efficient`,
+              stat: currencyFmt.format(intelPlatformKpis.atRisk),
             },
           ].map((card) => (
             <div key={card.title} className="board-insight-card">
@@ -1748,7 +2112,7 @@ function App() {
         <div className="board-table-card">
           <div className="board-chart-head">
             <span className="board-chart-title"><Table2 size={13} /> Top Campaigns by Video Completion Rate</span>
-            <span className="board-table-sub">Ranked by VCR · Active campaigns only</span>
+            <span className="board-table-sub">Ranked by VCR · {intelPlatform === 'All' ? 'All platforms' : intelPlatform}</span>
           </div>
           <table className="board-perf-table">
             <thead>
@@ -1763,7 +2127,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {topCampaignsByVcr.map((row, i) => (
+              {intelFilteredHealth.filter(c => c.vcr > 0).sort((a,b) => b.vcr - a.vcr).slice(0, 8).map((row, i) => (
                 <tr key={row.campaign.campaign_id}>
                   <td className="board-rank">{i + 1}</td>
                   <td>
@@ -1796,8 +2160,8 @@ function App() {
                   </td>
                 </tr>
               ))}
-              {topCampaignsByVcr.length === 0 && (
-                <tr><td colSpan={7} className="board-empty-row">No active campaign performance data loaded</td></tr>
+              {intelFilteredHealth.filter(c => c.vcr > 0).length === 0 && (
+                <tr><td colSpan={7} className="board-empty-row">No active campaign performance data for {intelPlatform}</td></tr>
               )}
             </tbody>
           </table>
@@ -2204,6 +2568,53 @@ function App() {
           </div>
         </aside>
       )}
+
+      {/* ── CHAT WIDGET ── */}
+      <div className={`chat-widget ${chatOpen ? 'open' : ''}`}>
+        {chatOpen && (
+          <div className="chat-box">
+            <div className="chat-head">
+              <div className="chat-head-left"><Bot size={14} /> <strong>Campaign Health Assistant</strong></div>
+              <button type="button" onClick={() => setChatOpen(false)}><X size={15} /></button>
+            </div>
+            <div className="chat-messages">
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`chat-msg ${m.role}`}>
+                  {m.role === 'ai' && <div className="chat-msg-icon"><Bot size={11} /></div>}
+                  <div className="chat-msg-text">{m.text}</div>
+                </div>
+              ))}
+            </div>
+            <form
+              className="chat-input-row"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const q = chatInput.trim()
+                if (!q) return
+                const answer = answerChat(q)
+                setChatMessages(prev => [...prev, { role: 'user', text: q }, { role: 'ai', text: answer }])
+                setChatInput('')
+              }}
+            >
+              <input
+                className="chat-input"
+                placeholder="Ask about delivery, alerts, platforms…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+              />
+              <button type="submit" className="chat-send-btn"><Zap size={14} /></button>
+            </form>
+          </div>
+        )}
+        <button
+          type="button"
+          className="chat-fab"
+          onClick={() => setChatOpen(o => !o)}
+          title="Campaign Health Assistant"
+        >
+          {chatOpen ? <X size={20} /> : <Bot size={20} />}
+        </button>
+      </div>
 
     </div>
   )
