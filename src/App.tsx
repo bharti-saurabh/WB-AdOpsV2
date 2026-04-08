@@ -1329,6 +1329,7 @@ function App() {
                     return s + (exp - r.impressions_delivered)
                   }, 0))
                 : 0
+              const revenueAtRisk = Math.max(0, (h.campaign.target_impressions - h.recentRows.reduce((s, r) => s + r.impressions_delivered, 0)) * h.campaign.cpm_usd / 1000)
               return (
                 <button
                   key={h.campaign.campaign_id}
