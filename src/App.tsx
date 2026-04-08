@@ -326,7 +326,7 @@ EOF`,
         tool: 'query_streaming_avails', icon: 'activity',
         desc: 'Checking streaming inventory for spillover', result: 'MAX: 65K+ CPM-compatible avails in late-prime',
         thought: 'We have 42 spots queued and some late-prime windows, but linear alone may not be enough. I want to check MAX streaming inventory as a high-quality spillover option — CPM needs to match within tolerance.',
-        query: `from wb_data import inventory_avails\n\nmax_avails = inventory_avails.query(\n    platform_id='MAX',\n    time_window='late_prime',\n    cpm_floor=CAMPAIGN_CPM * 0.85,\n    content_rating=['TV-G', 'TV-PG', 'TV-14']\n)\nprint(f"MAX late-prime avails: {max_avails['count']:,}")\nprint(f"CPM range: ${max_avails['cpm_min']:.2f}–${max_avails['cpm_max']:.2f}")`,
+        query: `from wb_data import inventory_avails\n\nmax_avails = inventory_avails.query(\n    platform_id='MAX',\n    time_window='late_prime',\n    cpm_floor=CAMPAIGN_CPM * 0.85,\n    content_rating=['TV-G', 'TV-PG', 'TV-14']\n)\nprint(f"MAX late-prime avails: {max_avails['count']:,}")\nprint(f"CPM range: \${max_avails['cpm_min']:.2f}–\${max_avails['cpm_max']:.2f}")`,
       },
       {
         tool: 'compute_recovery', icon: 'terminal',
