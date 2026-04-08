@@ -738,14 +738,6 @@ function App() {
       .sort((a, b) => a.deliveryRate - b.deliveryRate)
   }, [campaigns, performance, enrichedAlerts, campaignMap, advertiserMap, platformMap])
 
-  // ── Agent sessions (top 6 alerts by revenue impact, one per alert_type)
-  const agentSessions = useMemo(() => {
-    const seen = new Set<string>()
-    return enrichedAlerts
-      .filter((a) => { if (seen.has(a.alert_type) || !AGENT_PLAYBOOK[a.alert_type]) return false; seen.add(a.alert_type); return true })
-      .sort((a, b) => Number(b.revenue_impact_usd) - Number(a.revenue_impact_usd))
-      .slice(0, 6)
-  }, [enrichedAlerts])
 
 
   // ── Intelligence Board: hourly fill rate + completion rate over last 24h
@@ -1665,7 +1657,7 @@ function App() {
                 <YAxis tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} domain={[0, 100]} unit="%" />
                 <Tooltip
                   contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                  formatter={(val: number, name: string) => [`${val.toFixed(1)}%`, name === 'fillRate' ? 'Fill Rate' : 'VCR']}
+                  formatter={(val: number | string, name: string) => [`${Number(val).toFixed(1)}%`, name === 'fillRate' ? 'Fill Rate' : 'VCR'] as [string, string]}
                 />
                 <Area type="monotone" dataKey="fillRate" stroke="#FF5800" strokeWidth={2} fill="url(#gradFill)" dot={false} />
                 <Area type="monotone" dataKey="vcr"      stroke="#22c55e" strokeWidth={2} fill="url(#gradVcr)"  dot={false} />
@@ -1685,7 +1677,7 @@ function App() {
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} width={80} />
                 <Tooltip
                   contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                  formatter={(val: number) => [`${val.toFixed(1)}%`, 'Fill Rate']}
+                  formatter={(val: number | string) => [`${Number(val).toFixed(1)}%`, 'Fill Rate'] as [string, string]}
                 />
                 <Bar dataKey="fillRate" radius={[0, 4, 4, 0]}>
                   {platformPerformance.map((_, i) => (
