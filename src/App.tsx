@@ -212,6 +212,41 @@ EOF`,
   },
 }
 
+// ─── ALERT HYPOTHESES (shown before agent deep dive) ────────────────────────
+
+const ALERT_HYPOTHESES: Record<string, string[]> = {
+  'Empty Audience Segment': [
+    'DMP segment failed to sync with the identity graph (last sync >36h ago)',
+    'Audience cardinality near-zero due to over-restrictive targeting parameters',
+    'External key mapping changed in the latest taxonomy update, breaking lookup',
+  ],
+  'DMP Segment Sync Failure': [
+    'Upstream DMP connector returning 5xx errors during batch ingest',
+    'Taxonomy version mismatch between connector config and segment store (v3.1 vs v3.2)',
+    'API rate limiting on DMP causing silent batch ingest failures',
+  ],
+  'VAST Timeout': [
+    'CDN node degradation pushing p99 latency above 1800ms SLA threshold',
+    'Decision engine overloaded — request fanout exceeding concurrency limits',
+    'Network congestion on primary ad server route causing connection timeouts',
+  ],
+  'Roku Transcode Risk': [
+    'Creative bitrate exceeds Roku AVC Level 4.1 maximum (15,000 kbps)',
+    'No fallback rendition available in asset store for Roku device profile',
+    'Transcode pipeline not enforcing preflight bitrate checks on ingest',
+  ],
+  'Delivery Drop': [
+    'Prime-time sports programming consumed all available ad break pods',
+    'Frequency cap too restrictive — limiting reach to a small audience pool',
+    'Budget allocation heavily skewed to a platform with low current avails',
+  ],
+  'Prime-Time Underdelivery': [
+    'Live event overrun consumed planned ad pods (make-good queue building)',
+    'Underdelivery concentrated in 18:00–21:00 window; late-prime windows available',
+    'Streaming spillover routing not configured for this campaign flight',
+  ],
+}
+
 // ─── TABLE CATALOG ──────────────────────────────────────────────────────────
 
 const TABLE_CATALOG = [
@@ -877,9 +912,11 @@ function App() {
             <Database size={14} /> Data Explorer
           </button>
         </nav>
-        <div className="status-pill">
+        <div className="status-pill" title="1 of 6 monitored systems is degraded. CDN node us-east-2b: 43% packet loss. Ad decision latency above SLA threshold. Click Notifications tab to view active alerts.">
           <span className="live-dot" />
-          System Status: <strong>Degraded</strong>
+          <span>System Health</span>
+          <strong style={{ color: '#ef4444' }}>1 System Degraded</strong>
+          <span className="status-pill-hint">CDN node us-east-2b · hover for details</span>
         </div>
       </header>
 
@@ -931,13 +968,16 @@ function App() {
 
         <section className="insight-banner">
           <Sparkles size={18} />
-          <div>
-            <strong>AI Predictive Insight</strong>
-            <p>Cross-platform pacing suggests elevated underdelivery risk on linear live events in the next 6 hours.</p>
+          <div className="insight-content">
+            <strong>AI Network Forecast — Next 6 Hours</strong>
+            <p>Cross-platform pacing analysis predicts <span className="insight-highlight">elevated underdelivery risk on linear live events</span>. Prime-time sports windows are forecasted near-zero avails. Recommend activating streaming spillover on {campaigns.filter(c => c.status === 'Active').length > 0 ? Math.min(3, Math.ceil(enrichedAlerts.length / 4)) : 2} campaigns to maintain pacing targets.</p>
           </div>
-          <button type="button" className="lightweight-toggle" onClick={() => setIsLightweightMode((p) => !p)}>
-            {isLightweightMode ? 'Lightweight Mode: ON (sampled)' : 'Lightweight Mode: OFF (full)'}
-          </button>
+          <div className="insight-actions">
+            <button type="button" className="lightweight-toggle" onClick={() => setIsLightweightMode((p) => !p)}>
+              <span className="lt-label">{isLightweightMode ? '⚡ Fast Mode' : '📊 Full Data'}</span>
+              <span className="lt-desc">{isLightweightMode ? 'Sampling 1 in 8 rows — faster load' : 'Loading all performance rows'}</span>
+            </button>
+          </div>
         </section>
 
         <section className="chart-card pacing-card clickable" onClick={() => setDrilldown('pacing')}>
@@ -986,21 +1026,50 @@ function App() {
           </div>
         </section>
 
-        <section className="alerts-card">
-          <h3>Real-Time Alerts Feed</h3>
-          <div className="alerts-list">
-            {enrichedAlerts.map((alert) => (
-              <button key={alert.alert_id} className="alert-row" onClick={() => setSelectedAlert(alert)} type="button">
-                <div className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</div>
-                <div className="alert-main">
-                  <strong>{alert.campaign_name}</strong>
-                  <span>{alert.platform_name} ({alert.network}) • {alert.advertiser_name}</span>
-                  <p>{alert.trigger_value}</p>
-                </div>
-                <AlertTriangle size={16} />
-              </button>
-            ))}
+        {/* Campaigns at Risk */}
+        <section className="chart-card at-risk-card">
+          <div className="chart-title-row">
+            <h3>Campaigns at Risk — Delivery Below Target</h3>
+            <button type="button" className="see-all-btn" onClick={() => setActiveTab('health')}>View All <ChevronRight size={12} /></button>
           </div>
+          <div className="at-risk-list">
+            {campaignHealth.filter(h => h.deliveryRate < 90).slice(0, 6).map(h => (
+              <div key={h.campaign.campaign_id} className="at-risk-row">
+                <div className="at-risk-meta">
+                  <span className="at-risk-name">{h.campaign.campaign_name}</span>
+                  <span className="at-risk-platform">{h.platform_name} · {h.advertiser_name}</span>
+                </div>
+                <div className="at-risk-bar-wrap">
+                  <div className="at-risk-bar" style={{ width: `${Math.max(2, h.deliveryRate)}%`, background: h.deliveryRate < 20 ? '#ef4444' : h.deliveryRate < 75 ? '#f59e0b' : '#FF5800' }} />
+                  <span style={{ color: h.deliveryRate < 20 ? '#ef4444' : h.deliveryRate < 75 ? '#f59e0b' : '#FF5800', fontSize: '0.78rem', fontWeight: 700 }}>{h.deliveryRate.toFixed(0)}%</span>
+                </div>
+                {h.alertCount > 0 && <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span>}
+              </div>
+            ))}
+            {campaignHealth.filter(h => h.deliveryRate < 90).length === 0 && (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0', fontSize: '0.84rem' }}>All campaigns within pacing guardrails ✓</p>
+            )}
+          </div>
+        </section>
+
+        {/* Alert Type Revenue Breakdown */}
+        <section className="chart-card alert-revenue-card clickable" onClick={() => setDrilldown('fallout')}>
+          <div className="chart-title-row">
+            <h3>Revenue Exposure by Alert Type</h3>
+            <span className="drill-hint-inline">Drill in <ChevronRight size={12} /></span>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart layout="vertical"
+              data={alertTypeTotals.sort((a, b) => b.revenue - a.revenue).slice(0, 5)}
+              margin={{ top: 4, right: 60, left: 130, bottom: 0 }}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" horizontal={false} />
+              <XAxis type="number" stroke="#9EA3B0" tickFormatter={(v) => `$${compactFmt.format(v)}`} tick={{ fontSize: 10, fill: '#555b6e' }} />
+              <YAxis type="category" dataKey="type" stroke="#9EA3B0" tick={{ fontSize: 10, fill: '#555b6e' }} width={125} />
+              <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(255,88,0,0.25)', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', color: '#1a1a1a' }}
+                formatter={(v) => currencyFmt.format(Number(v))} />
+              <Bar dataKey="revenue" fill="#FF5800" radius={[0, 4, 4, 0]} name="Revenue at Risk" />
+            </BarChart>
+          </ResponsiveContainer>
         </section>
       </main>
       )}
@@ -1010,7 +1079,7 @@ function App() {
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'notifications' && (() => {
         const filteredAlerts = enrichedAlerts.filter((a) => notifFilter === 'All' || a.severity === notifFilter)
-        const activeAnalysisAlert = expandedAlert ? enrichedAlerts.find(a => a.alert_id === expandedAlert) ?? null : null
+        const activeAlert = expandedAlert ? enrichedAlerts.find(a => a.alert_id === expandedAlert) ?? null : null
         return (
         <main key="notifications" className="notif-shell tab-content">
           {/* Header — spans both columns */}
@@ -1026,92 +1095,135 @@ function App() {
             </div>
           </div>
 
-          {/* Left pane — compact cards */}
+          {/* Left pane — clean card list */}
           <div className="notif-left-pane">
             {filteredAlerts.map((alert) => {
-              const pb  = AGENT_PLAYBOOK[alert.alert_type]
               const dec = reviewDecisions[alert.alert_id]
               const isActive = expandedAlert === alert.alert_id
+              const aState = agentState[alert.alert_id]
               return (
-                <div
+                <button
                   key={alert.alert_id}
-                  className={`notif-compact-card ${dec ?? ''} ${isActive ? 'active-card' : ''}`}
+                  type="button"
+                  className={`notif-list-card ${dec ?? ''} ${isActive ? 'active-card' : ''}`}
                   onClick={() => setExpandedAlert(isActive ? null : alert.alert_id)}
                 >
-                  <div className="notif-compact-top">
+                  <div className="nlc-top">
                     <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
-                    <div className="notif-compact-info">
-                      <strong>{alert.alert_type}</strong>
-                      <span>{alert.campaign_name} · {alert.platform_name}</span>
-                    </div>
-                    <span className="notif-compact-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span>
+                    <span className="nlc-revenue">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span>
                   </div>
-                  <div className="notif-compact-bottom">
-                    <span className="notif-compact-trigger">{alert.trigger_value}</span>
-                    {!dec && pb && (
-                      <button
-                        className="deep-dive-btn"
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          triggerAgentAnalysis(alert.alert_id, pb)
-                        }}
-                      >
-                        <Bot size={12} /> Deep Dive
-                      </button>
-                    )}
-                    {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={11} /> Deployed</span>}
-                    {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={11} /> Rejected</span>}
+                  <div className="nlc-type">{alert.alert_type}</div>
+                  <div className="nlc-campaign">{alert.campaign_name}</div>
+                  <div className="nlc-meta">{alert.platform_name} · {alert.advertiser_name}</div>
+                  <div className="nlc-footer">
+                    {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={10} /> Deployed</span>}
+                    {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={10} /> Rejected</span>}
+                    {!dec && aState === 'complete' && <span className="dec-badge pending"><CheckCircle2 size={10} /> Analyzed</span>}
+                    {!dec && (!aState || aState === 'idle') && <span className="nlc-cta">Click to review →</span>}
+                    {!dec && aState === 'running' && <span className="nlc-running"><span className="nlc-dot" />Analyzing…</span>}
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
 
-          {/* Right pane — agent analysis */}
+          {/* Right pane */}
           <div className="notif-right-pane">
-            {!activeAnalysisAlert ? (
+            {!activeAlert ? (
               <div className="notif-right-empty">
-                <Bot size={40} />
-                <p>Select an alert and click <strong>Deep Dive</strong> to launch AI root cause analysis</p>
+                <Bot size={44} />
+                <strong>Select an alert to begin</strong>
+                <p>Click any notification on the left to view context and launch AI root cause analysis.</p>
               </div>
             ) : (() => {
-              const alert = activeAnalysisAlert
+              const alert = activeAlert
               const pb    = AGENT_PLAYBOOK[alert.alert_type]
               const dec   = reviewDecisions[alert.alert_id]
               const rca   = buildRca(alert)
               const aState = agentState[alert.alert_id]
               const aStep  = agentStep[alert.alert_id] ?? 0
-              if (!pb) return (
-                <div className="notif-right-empty">
-                  <ShieldAlert size={36} />
-                  <p>No agent playbook available for <strong>{alert.alert_type}</strong></p>
+              const hypotheses = ALERT_HYPOTHESES[alert.alert_type] ?? []
+
+              // Shared header
+              const header = (
+                <div className="notif-analysis-header">
+                  <div className="notif-analysis-meta">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
+                      <strong style={{ fontSize: '1rem' }}>{alert.alert_type}</strong>
+                    </div>
+                    <span>{alert.campaign_name} · {alert.advertiser_name} · {alert.platform_name}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{alert.alert_timestamp} · {alert.alert_id}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+                    <span style={{ fontSize: '1rem', color: '#ef4444', fontWeight: 700 }}>{currencyFmt.format(Number(alert.revenue_impact_usd))}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>revenue at risk</span>
+                    {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={11} /> Deployed</span>}
+                    {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={11} /> Rejected</span>}
+                    {!dec && <span className="dec-badge pending"><Bot size={11} /> Awaiting Review</span>}
+                  </div>
                 </div>
               )
-              return (
-                <div className="notif-analysis-pane">
-                  <div className="notif-analysis-header">
-                    <div className="notif-analysis-meta">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
-                        <strong>{alert.alert_type}</strong>
-                      </div>
-                      <span>{alert.campaign_name} · {alert.advertiser_name} · {alert.platform_name}</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-                      <span style={{ fontSize: '0.86rem', color: '#ef4444', fontWeight: 700 }}>{currencyFmt.format(Number(alert.revenue_impact_usd))}</span>
-                      {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={11} /> Deployed</span>}
-                      {dec === 'rejected' && <span className="dec-badge rejected"><XCircle size={11} /> Rejected</span>}
-                      {!dec && <span className="dec-badge pending"><Bot size={11} /> Awaiting Review</span>}
-                    </div>
-                  </div>
 
-                  {/* Agent working animation */}
-                  {aState === 'running' && (
-                    <div className="agent-working-panel">
-                      <div className="agent-working-head">
-                        <div className="agent-spinner"><Bot size={14} /></div>
-                        <span>AI agent analyzing root cause…</span>
+              // State 1: No agent started yet — show context + hypotheses + Deep Dive button
+              if (!aState || aState === 'idle') {
+                return (
+                  <div className="notif-analysis-pane">
+                    {header}
+
+                    {/* Alert context */}
+                    <div className="notif-context-box">
+                      <div className="nd-label"><AlertTriangle size={13} /> Alert Signal</div>
+                      <p className="notif-trigger-text">{alert.trigger_value}</p>
+                      <div className="notif-impact-row">
+                        <div><span className="impact-label">Impression Shortfall</span><span className="impact-val">{numberFmt.format(alert.expected_impressions - alert.actual_impressions)}</span></div>
+                        <div><span className="impact-label">Threshold</span><span className="impact-val">{alert.threshold}</span></div>
+                        <div><span className="impact-label">Network</span><span className="impact-val">{alert.network ?? (platformMap[campaignMap[alert.campaign_id]?.platform_id ?? '']?.platform_name?.includes('TNT') || platformMap[campaignMap[alert.campaign_id]?.platform_id ?? '']?.platform_name?.includes('TBS') ? 'Linear' : 'Streaming')}</span></div>
+                      </div>
+                    </div>
+
+                    {/* Hypotheses */}
+                    {hypotheses.length > 0 && pb && (
+                      <div className="notif-hypotheses">
+                        <div className="nd-label"><Sparkles size={13} /> Potential Hypotheses</div>
+                        <div className="hypothesis-list">
+                          {hypotheses.map((h, i) => (
+                            <div key={i} className="hypothesis-item">
+                              <span className="hypothesis-num">{i + 1}</span>
+                              <span>{h}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="hypothesis-note">AI agent will investigate and confirm which hypothesis is root cause.</p>
+                      </div>
+                    )}
+
+                    {!dec && pb && (
+                      <button
+                        className="deep-dive-full-btn"
+                        type="button"
+                        onClick={() => triggerAgentAnalysis(alert.alert_id, pb)}
+                      >
+                        <Bot size={16} /> Launch Deep Dive &amp; Resolve
+                      </button>
+                    )}
+                    {!pb && <div className="notif-right-empty" style={{ minHeight: 80 }}><p>No agent playbook for this alert type.</p></div>}
+                  </div>
+                )
+              }
+
+              // State 2: Agent running — live animation only
+              if (aState === 'running') {
+                return (
+                  <div className="notif-analysis-pane">
+                    {header}
+                    <div className="agent-running-panel">
+                      <div className="agent-running-head">
+                        <div className="agent-spinner"><Bot size={16} /></div>
+                        <div>
+                          <strong>AI Agent Working</strong>
+                          <span>Running root cause analysis — please wait…</span>
+                        </div>
                       </div>
                       <div className="agent-steps-live">
                         {pb.steps.map((step, i) => (
@@ -1126,94 +1238,91 @@ function App() {
                             <div className="asl-body">
                               <code>{step.tool}()</code>
                               <span>{step.desc}</span>
-                              {i < aStep && <span className="asl-result">→ {step.result}</span>}
+                              {i < aStep && <span className="asl-result">↳ {step.result}</span>}
                             </div>
                           </div>
                         ))}
                       </div>
                     </div>
-                  )}
+                  </div>
+                )
+              }
 
-                  {/* Completed analysis */}
-                  {(aState === 'complete' || !aState || aState === 'idle') && (
-                    <>
-                      {/* Agent steps */}
-                      <div className="nd-section">
-                        <div className="nd-label"><Bot size={13} /> Agent Steps</div>
-                        <div className="agent-steps compact">
-                          {pb.steps.map((step, i) => (
-                            <div className={`agent-step step-anim-${i}`} key={step.tool}>
-                              <div className="step-icon">
-                                {step.icon === 'search'   && <Search   size={11} />}
-                                {step.icon === 'database' && <Database size={11} />}
-                                {step.icon === 'terminal' && <Terminal size={11} />}
-                                {step.icon === 'activity' && <Activity size={11} />}
-                                {step.icon === 'zap'      && <Zap      size={11} />}
-                              </div>
-                              <div className="step-body">
-                                <code className="step-tool">{step.tool}()</code>
-                                <span className="step-desc">{step.desc}</span>
-                                <span className="step-result">→ {step.result}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+              // State 3: Complete — sequential reveal with animation delays
+              return (
+                <div className="notif-analysis-pane">
+                  {header}
 
-                      {/* Root cause */}
-                      <div className={`nd-section ${aState === 'complete' ? 'fade-in-section' : ''}`}>
-                        <div className="nd-label"><Search size={13} /> Root Cause ({rca.confidence}% confidence)</div>
-                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>{pb.rootCause}</p>
-                      </div>
-
-                      {/* System trace */}
-                      <div className="nd-section">
-                        <div className="nd-label"><Terminal size={13} /> System Trace</div>
-                        <pre className="notif-trace">{rca.trace.join('\n')}</pre>
-                      </div>
-
-                      {/* Fix artifact */}
-                      <div className={`nd-section ${aState === 'complete' ? 'fade-in-section' : ''}`}>
-                        <div className="nd-label">
-                          <Zap size={13} /> Proposed Fix
-                          <span className="fix-type-badge">{pb.fixType}</span>
-                          <span className="fix-recovery">{pb.recoveryTime}</span>
-                        </div>
-                        <pre className="fix-code">{pb.fixCode}</pre>
-                      </div>
-
-                      {/* Revenue impact */}
-                      <div className="nd-section nd-impact">
-                        <div><span className="impact-label">Revenue at Risk</span><span className="impact-val">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span></div>
-                        <div><span className="impact-label">Impression Shortfall</span><span className="impact-val">{numberFmt.format(alert.expected_impressions - alert.actual_impressions)}</span></div>
-                        <div><span className="impact-label">Alert ID</span><span className="impact-val code">{alert.alert_id}</span></div>
-                      </div>
-
-                      {/* Actions */}
-                      {!dec && (
-                        <div className={`nd-actions ${aState === 'complete' ? 'fade-in-section' : ''}`}>
-                          <button className="btn-approve" type="button"
-                            onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
-                            <CheckCircle2 size={14} /> Approve &amp; Deploy
-                          </button>
-                          <div className="reject-group">
-                            <input
-                              className="reject-reason-input"
-                              placeholder="Rejection reason (optional)…"
-                              value={rejectReason[alert.alert_id] ?? ''}
-                              onChange={(e) => setRejectReason((p) => ({ ...p, [alert.alert_id]: e.target.value }))}
-                            />
-                            <button className="btn-reject" type="button"
-                              onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
-                              <XCircle size={14} /> Reject
-                            </button>
+                  {/* Steps summary */}
+                  <div className="nd-section fade-in-section" style={{ animationDelay: '0.1s' }}>
+                    <div className="nd-label"><Bot size={13} /> Agent Steps Completed</div>
+                    <div className="agent-steps compact">
+                      {pb.steps.map((step, i) => (
+                        <div className={`agent-step step-anim-${i}`} key={step.tool}>
+                          <div className="step-icon"><CheckCircle2 size={11} /></div>
+                          <div className="step-body">
+                            <code className="step-tool">{step.tool}()</code>
+                            <span className="step-result" style={{ color: 'var(--text-secondary)' }}>→ {step.result}</span>
                           </div>
                         </div>
-                      )}
-                      {dec === 'approved' && <div className="nd-deployed"><CheckCircle2 size={15} /> Fix approved and queued for deployment.</div>}
-                      {dec === 'rejected'  && <div className="nd-rejected"><XCircle size={15} /> Fix rejected.{rejectReason[alert.alert_id] ? ` Reason: ${rejectReason[alert.alert_id]}` : ''}</div>}
-                    </>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Root cause */}
+                  <div className="nd-section fade-in-section" style={{ animationDelay: '0.5s' }}>
+                    <div className="nd-label"><Search size={13} /> Root Cause <span style={{ color: 'var(--green)', marginLeft: 4 }}>{rca.confidence}% confidence</span></div>
+                    <div className="rca-text-box">
+                      <p>{pb.rootCause}</p>
+                    </div>
+                  </div>
+
+                  {/* System trace */}
+                  <div className="nd-section fade-in-section" style={{ animationDelay: '1.0s' }}>
+                    <div className="nd-label"><Terminal size={13} /> System Trace</div>
+                    <pre className="notif-trace">{rca.trace.join('\n')}</pre>
+                  </div>
+
+                  {/* Fix artifact */}
+                  <div className="nd-section fade-in-section" style={{ animationDelay: '1.5s' }}>
+                    <div className="nd-label">
+                      <Zap size={13} /> Proposed Fix
+                      <span className="fix-type-badge">{pb.fixType}</span>
+                      <span className="fix-recovery">{pb.recoveryTime}</span>
+                    </div>
+                    <pre className="fix-code">{pb.fixCode}</pre>
+                  </div>
+
+                  {/* Revenue impact */}
+                  <div className="nd-section nd-impact fade-in-section" style={{ animationDelay: '2.0s' }}>
+                    <div><span className="impact-label">Revenue at Risk</span><span className="impact-val">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span></div>
+                    <div><span className="impact-label">Impression Shortfall</span><span className="impact-val">{numberFmt.format(alert.expected_impressions - alert.actual_impressions)}</span></div>
+                    <div><span className="impact-label">Alert ID</span><span className="impact-val code">{alert.alert_id}</span></div>
+                  </div>
+
+                  {/* Actions */}
+                  {!dec && (
+                    <div className="nd-actions fade-in-section" style={{ animationDelay: '2.4s' }}>
+                      <button className="btn-approve" type="button"
+                        onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'approved' }))}>
+                        <CheckCircle2 size={14} /> Approve &amp; Deploy
+                      </button>
+                      <div className="reject-group">
+                        <input
+                          className="reject-reason-input"
+                          placeholder="Rejection reason (optional)…"
+                          value={rejectReason[alert.alert_id] ?? ''}
+                          onChange={(e) => setRejectReason((p) => ({ ...p, [alert.alert_id]: e.target.value }))}
+                        />
+                        <button className="btn-reject" type="button"
+                          onClick={() => setReviewDecisions((p) => ({ ...p, [alert.alert_id]: 'rejected' }))}>
+                          <XCircle size={14} /> Reject
+                        </button>
+                      </div>
+                    </div>
                   )}
+                  {dec === 'approved' && <div className="nd-deployed fade-in-section"><CheckCircle2 size={15} /> Fix approved and queued for deployment.</div>}
+                  {dec === 'rejected'  && <div className="nd-rejected fade-in-section"><XCircle size={15} /> Fix rejected.{rejectReason[alert.alert_id] ? ` Reason: ${rejectReason[alert.alert_id]}` : ''}</div>}
                 </div>
               )
             })()}
