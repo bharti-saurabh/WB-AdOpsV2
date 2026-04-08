@@ -1657,7 +1657,8 @@ function App() {
                 <YAxis tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} domain={[0, 100]} unit="%" />
                 <Tooltip
                   contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                  formatter={(val: number | string, name: string) => [`${Number(val).toFixed(1)}%`, name === 'fillRate' ? 'Fill Rate' : 'VCR'] as [string, string]}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={((val: number | string, name: string) => [`${Number(val).toFixed(1)}%`, name === 'fillRate' ? 'Fill Rate' : 'VCR']) as any}
                 />
                 <Area type="monotone" dataKey="fillRate" stroke="#FF5800" strokeWidth={2} fill="url(#gradFill)" dot={false} />
                 <Area type="monotone" dataKey="vcr"      stroke="#22c55e" strokeWidth={2} fill="url(#gradVcr)"  dot={false} />
@@ -1677,7 +1678,8 @@ function App() {
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#9EA3B0' }} tickLine={false} axisLine={false} width={80} />
                 <Tooltip
                   contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
-                  formatter={(val: number | string) => [`${Number(val).toFixed(1)}%`, 'Fill Rate'] as [string, string]}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={((val: number | string) => [`${Number(val).toFixed(1)}%`, 'Fill Rate']) as any}
                 />
                 <Bar dataKey="fillRate" radius={[0, 4, 4, 0]}>
                   {platformPerformance.map((_, i) => (
