@@ -1390,7 +1390,13 @@ function App() {
                 >
                   <div className="arw-top">
                     <span className="arw-risk-badge" style={{ background: `${riskColor}18`, color: riskColor, borderColor: `${riskColor}40` }}>{riskLabel}</span>
-                    {h.alertCount > 0 && <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span>}
+                    {h.alertCount > 0
+                      ? <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span>
+                      : h.deliveryRate < 10
+                        ? <span className="severity-pill critical">Critical</span>
+                        : h.deliveryRate < 85
+                          ? <span className="severity-pill high">High</span>
+                          : null}
                   </div>
                   <div className="arw-name">{h.campaign.campaign_name}</div>
                   <div className="arw-meta">{h.platform_name} · {h.advertiser_name}</div>
@@ -1812,7 +1818,7 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {campaignHealth.map((h) => (
+                {campaignHealth.filter((h) => h.recentRows.length > 0 || h.alertCount > 0).map((h) => (
                   <tr key={h.campaign.campaign_id}
                     className={`health-row ${selectedCampaignId === h.campaign.campaign_id ? 'selected' : ''}`}
                     onClick={() => setSelectedCampaignId(h.campaign.campaign_id === selectedCampaignId ? null : h.campaign.campaign_id)}>
@@ -1834,7 +1840,11 @@ function App() {
                     <td>
                       {h.alertCount > 0
                         ? <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.alertCount} {h.topSeverity}</span>
-                        : <span className="no-alerts">&#10003; Clear</span>}
+                        : h.deliveryRate < 10
+                          ? <span className="severity-pill critical">Critical</span>
+                          : h.deliveryRate < 85
+                            ? <span className="severity-pill high">High</span>
+                            : <span className="no-alerts">&#10003; Clear</span>}
                     </td>
                   </tr>
                 ))}
