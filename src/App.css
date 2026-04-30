@@ -2784,3 +2784,24 @@ body {
   line-height: 1.4;
   opacity: 0.85;
 }
+
+/* ── Pacing chart event legend ──────────────────────────────────────────────── */
+.pacing-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 4px 2px;
+}
+.pacing-event {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.71rem;
+  color: var(--text-muted);
+}
+.pe-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

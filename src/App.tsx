@@ -49,7 +49,6 @@ const PIE_COLORS = ['#FF5800', '#FF8C42', '#FFB347', '#22c55e', '#9EA3B0']
 const numberFmt  = new Intl.NumberFormat('en-US')
 const compactFmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-const compactCurrencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 })
 
 // ─── DEMO PACING DATA (realistic 24h story with events) ─────────────────────
 
@@ -1163,7 +1162,6 @@ function App() {
   // Count-up animated values — must be before any early return (Rules of Hooks)
   const countCampaigns = useCountUp(loading ? 0 : 5000)
   const countAlerts    = useCountUp(loading ? 0 : 85)
-  const countRevenue   = useCountUp(loading ? 0 : topMetrics.revenueAtRisk)
 
   if (loading) {
     return (
@@ -1288,8 +1286,8 @@ function App() {
               <span>Revenue at Risk</span>
               <div className="metric-icon" style={{ background: 'rgba(245,158,11,0.10)', color: '#f59e0b' }}><CircleDollarSign size={15} /></div>
             </div>
-            <h2>{compactCurrencyFmt.format(countRevenue)}</h2>
-            <p className="negative">↓ from $4.2M yesterday — AI resolved 3 critical issues</p>
+            <h2>$3.2M</h2>
+            <p className="negative">↓ from $4.2M yesterday · 3 issues AI-resolved</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
         </section>
@@ -1311,8 +1309,8 @@ function App() {
             <h3>Network Delivery Pacing (Last 24h)</h3>
             <span className="drill-hint-inline">Drill in <ChevronRight size={12} /></span>
           </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={DEMO_PACING_SERIES} margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={DEMO_PACING_SERIES} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.5} />
@@ -1326,17 +1324,18 @@ function App() {
                 formatter={(v) => numberFmt.format(Number(v ?? 0))} />
               <Area type="monotone" dataKey="target" stroke="#5A5F6E" strokeDasharray="4 4" fill="none" name="Target" />
               <Area type="monotone" dataKey="actual" stroke="#FF5800" fill="url(#actualFill)" name="Actual" />
-              <ReferenceLine x="01:00" stroke="#ef4444" strokeDasharray="3 3"
-                label={{ value: '⚠ Campaign halted — audience sync failure', position: 'top', fontSize: 9, fill: '#ef4444', offset: 4 }} />
-              <ReferenceLine x="04:00" stroke="#22c55e" strokeDasharray="3 3"
-                label={{ value: '✓ AI fix deployed 03:47 — delivery restored', position: 'top', fontSize: 9, fill: '#22c55e', offset: 4 }} />
-              <ReferenceLine x="12:00" stroke="#f59e0b" strokeDasharray="3 3"
-                label={{ value: '⚡ FreeWheel timeout spike — 847 requests failed', position: 'top', fontSize: 9, fill: '#f59e0b', offset: 4 }} />
-              <ReferenceLine x="20:00" stroke="#FF8C42" strokeDasharray="3 3"
-                label={{ value: '↑ Max prime-time surge', position: 'top', fontSize: 9, fill: '#FF8C42', offset: 4 }} />
+              <ReferenceLine x="01:00" stroke="#ef4444" strokeDasharray="3 3" strokeWidth={1.5} />
+              <ReferenceLine x="04:00" stroke="#22c55e" strokeDasharray="3 3" strokeWidth={1.5} />
+              <ReferenceLine x="12:00" stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1.5} />
+              <ReferenceLine x="20:00" stroke="#FF8C42" strokeDasharray="3 3" strokeWidth={1.5} />
             </AreaChart>
           </ResponsiveContainer>
-          <p className="chart-footnote">AI Insight: Audience sync failure halted delivery 11PM–3:47AM. AI auto-deployed fix in 43 seconds. Prime-time Max surge recovered shortfall by 19:00.</p>
+          <div className="pacing-events">
+            <div className="pacing-event"><span className="pe-dot" style={{ background: '#ef4444' }} />01:00 — Campaign halted — audience sync failure</div>
+            <div className="pacing-event"><span className="pe-dot" style={{ background: '#22c55e' }} />03:47 — AI fix deployed — delivery restored</div>
+            <div className="pacing-event"><span className="pe-dot" style={{ background: '#f59e0b' }} />12:00 — FreeWheel timeout spike — 847 requests failed</div>
+            <div className="pacing-event"><span className="pe-dot" style={{ background: '#FF8C42' }} />20:00 — Max prime-time surge</div>
+          </div>
         </section>
 
         <section className="chart-card donut-card clickable" onClick={() => setDrilldown('fallout')}>
