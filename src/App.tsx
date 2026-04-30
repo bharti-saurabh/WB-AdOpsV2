@@ -1393,7 +1393,7 @@ function App() {
             <button type="button" className="see-all-btn" onClick={() => setActiveTab('health')}>View All <ChevronRight size={12} /></button>
           </div>
           <div className="at-risk-widgets">
-            {campaignHealth.filter(h => h.deliveryRate < 90).slice(0, 6).map(h => {
+            {campaignHealth.filter(h => h.deliveryRate < 90).slice(0, 4).map(h => {
               const riskAlert = enrichedAlerts.find(a => a.campaign_id === h.campaign.campaign_id)
               const riskColor = h.deliveryRate < 20 ? '#ef4444' : h.deliveryRate < 75 ? '#f59e0b' : '#FF5800'
               const riskLabel = h.deliveryRate < 20 ? 'Critical' : h.deliveryRate < 75 ? 'At Risk' : 'Below Target'
@@ -1417,13 +1417,9 @@ function App() {
                 >
                   <div className="arw-top">
                     <span className="arw-risk-badge" style={{ background: `${riskColor}18`, color: riskColor, borderColor: `${riskColor}40` }}>{riskLabel}</span>
-                    {h.alertCount > 0
-                      ? <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.topSeverity}</span>
-                      : h.deliveryRate < 10
-                        ? <span className="severity-pill critical">Critical</span>
-                        : h.deliveryRate < 85
-                          ? <span className="severity-pill high">High</span>
-                          : null}
+                    {h.alertCount > 0 && (
+                      <span className={`severity-pill ${(h.topSeverity ?? '').toLowerCase()}`}>{h.alertCount} alert{h.alertCount !== 1 ? 's' : ''}</span>
+                    )}
                   </div>
                   <div className="arw-name">{h.campaign.campaign_name}</div>
                   <div className="arw-meta">{h.platform_name} · {h.advertiser_name}</div>
