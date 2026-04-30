@@ -764,6 +764,33 @@ function App() {
   // Old RCA panel (from overview alerts click)
   const [selectedAlert, setSelectedAlert] = useState<EnrichedAlert | null>(null)
 
+  // Campaign health table sort
+  type HealthSortCol = 'campaign' | 'advertiser' | 'platform' | 'delivery' | 'fill' | 'vcr' | 'error' | 'alerts'
+  const [healthSortCol, setHealthSortCol] = useState<HealthSortCol>('alerts')
+  const [healthSortDir, setHealthSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const toggleHealthSort = (col: HealthSortCol) => {
+    if (col === healthSortCol) {
+      setHealthSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setHealthSortCol(col)
+      setHealthSortDir('asc')
+    }
+  }
+
+  const severityWeight = (h: typeof campaignHealth[0]): number => {
+    if (h.alertCount > 0) {
+      const s = (h.topSeverity ?? '').toLowerCase()
+      if (s === 'critical') return 0
+      if (s === 'high') return 1
+      if (s === 'medium') return 2
+      return 3
+    }
+    if (h.deliveryRate < 10) return 0.5
+    if (h.deliveryRate < 85) return 1.5
+    return 4
+  }
+
   // Data explorer preview
   const [previewTable, setPreviewTable] = useState<string | null>(null)
   // Intelligence board platform tab
@@ -1813,12 +1840,42 @@ function App() {
             <table className="health-table">
               <thead>
                 <tr>
-                  <th>Campaign</th><th>Advertiser</th><th>Platform</th>
-                  <th>Delivery %</th><th>Fill %</th><th>VCR %</th><th>Error %</th><th>Alerts</th>
+                  {(['campaign','advertiser','platform'] as HealthSortCol[]).map(col => (
+                    <th key={col} className="sortable" onClick={() => toggleHealthSort(col)}>
+                      {col.charAt(0).toUpperCase()+col.slice(1)}
+                      {healthSortCol === col ? (healthSortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                    </th>
+                  ))}
+                  {([['delivery','Delivery %'],['fill','Fill %'],['vcr','VCR %'],['error','Error %'],['alerts','Alerts']] as [HealthSortCol,string][]).map(([col,label]) => (
+                    <th key={col} className="sortable" onClick={() => toggleHealthSort(col)}>
+                      {label}
+                      {healthSortCol === col ? (healthSortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {campaignHealth.filter((h) => h.recentRows.length > 0 || h.alertCount > 0).map((h) => (
+                {campaignHealth.filter((h) => h.recentRows.length > 0 || h.alertCount > 0).sort((a, b) => {
+                  let cmp = 0
+                  if (healthSortCol === 'alerts') {
+                    cmp = severityWeight(a) - severityWeight(b)
+                  } else if (healthSortCol === 'campaign') {
+                    cmp = a.campaign.campaign_name.localeCompare(b.campaign.campaign_name)
+                  } else if (healthSortCol === 'advertiser') {
+                    cmp = (a.advertiser_name ?? '').localeCompare(b.advertiser_name ?? '')
+                  } else if (healthSortCol === 'platform') {
+                    cmp = (a.platform_name ?? '').localeCompare(b.platform_name ?? '')
+                  } else if (healthSortCol === 'delivery') {
+                    cmp = a.deliveryRate - b.deliveryRate
+                  } else if (healthSortCol === 'fill') {
+                    cmp = a.fillRate - b.fillRate
+                  } else if (healthSortCol === 'vcr') {
+                    cmp = a.vcr - b.vcr
+                  } else if (healthSortCol === 'error') {
+                    cmp = a.errorRate - b.errorRate
+                  }
+                  return healthSortDir === 'asc' ? cmp : -cmp
+                }).map((h) => (
                   <tr key={h.campaign.campaign_id}
                     className={`health-row ${selectedCampaignId === h.campaign.campaign_id ? 'selected' : ''}`}
                     onClick={() => setSelectedCampaignId(h.campaign.campaign_id === selectedCampaignId ? null : h.campaign.campaign_id)}>

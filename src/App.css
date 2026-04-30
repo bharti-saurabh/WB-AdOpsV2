@@ -2805,3 +2805,13 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
 }
+
+.health-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.health-table th.sortable:hover {
+  background: rgba(255,88,0,0.08);
+  color: var(--orange);
+}
