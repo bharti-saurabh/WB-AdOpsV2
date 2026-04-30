@@ -1,16 +1,16 @@
-alert_id,alert_timestamp,severity,alert_type,campaign_id,trigger_value,threshold,expected_impressions,actual_impressions,revenue_impact_usd,status
-ALT-0001,2024-07-14 15:00:00,High,Delivery Drop,CMP-002,30.0% below expected,25% below expected,62543,43778,589.6,Open
-ALT-0002,2024-07-10 21:00:00,Critical,VAST Timeout,CMP-004,"avg_latency_ms>5000, vast_responses=0",latency<2000 & responses>0,49294,3942,1389.59,Open
-ALT-0003,2024-07-15 23:00:00,Critical,Empty Audience Segment,CMP-001,impressions_delivered=0 for 4 hours,impressions_delivered>0,26696,0,576.1,Open
-ALT-0004,2024-07-15 22:30:00,High,DMP Segment Sync Failure,CMP-001,segment_id=SEG-001 sync_status=Failed,sync_status=Active,0,0,0.0,Open
-ALT-0005,2024-07-11 09:00:00,Medium,Roku Transcode Risk,CMP-003,creative bitrate_kbps>15000,bitrate_kbps<=15000,0,0,0.0,Open
-ALT-0006,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-007,prime-time delivery < expected,within 10% of expected,62596,62596,0.0,Open
-ALT-0007,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-017,prime-time delivery < expected,within 10% of expected,48856,48856,0.0,Open
-ALT-0008,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-027,prime-time delivery < expected,within 10% of expected,36053,36053,0.0,Open
-ALT-0009,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-037,prime-time delivery < expected,within 10% of expected,61763,61763,0.0,Open
-ALT-0010,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-047,prime-time delivery < expected,within 10% of expected,50919,50919,0.0,Open
-ALT-0011,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-057,prime-time delivery < expected,within 10% of expected,64303,64303,0.0,Open
-ALT-0012,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-067,prime-time delivery < expected,within 10% of expected,49870,49870,0.0,Open
-ALT-0013,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-077,prime-time delivery < expected,within 10% of expected,74046,74046,0.0,Open
-ALT-0014,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-087,prime-time delivery < expected,within 10% of expected,21855,21855,0.0,Open
-ALT-0015,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-097,prime-time delivery < expected,within 10% of expected,14068,14068,0.0,Open
+alert_id,alert_timestamp,severity,alert_type,campaign_id,trigger_value,threshold,expected_impressions,actual_impressions,revenue_impact_usd,status,description
+ALT-0001,2024-07-14 15:00:00,High,Delivery Drop,CMP-002,30.0% below expected,25% below expected,62543,43778,280000,Open,Samsung Discovery+ — Delivery fell 30% below expected — Sports fans segment delivery gap — connected TV impressions lost
+ALT-0002,2024-07-10 21:00:00,Critical,VAST Timeout,CMP-004,"avg_latency_ms>5000, vast_responses=0",latency<2000 & responses>0,49294,3942,520000,Open,"Nike Max Streaming — FreeWheel VAST timeout — avg latency 5,000ms, zero ad responses returned — Sports Fans 18–34 audience unserved"
+ALT-0003,2024-07-15 23:00:00,Critical,Empty Audience Segment,CMP-001,impressions_delivered=0 for 4 hours,impressions_delivered>0,26696,0,340000,Open,"Coca-Cola Q4 Max Flight — Audience sync failed — US Adults 25–54 segment has zero people in it — $340,000 delivery at risk"
+ALT-0004,2024-07-15 22:30:00,High,DMP Segment Sync Failure,CMP-001,segment_id=SEG-001 sync_status=Failed,sync_status=Active,0,0,0,Open,Coca-Cola Q4 Max Flight — LiveRamp connector dropped — SEG-001 sync status failed 36 hours ago — all 3 campaigns using this segment halted
+ALT-0005,2024-07-11 09:00:00,Medium,Roku Transcode Risk,CMP-003,creative bitrate_kbps>15000,bitrate_kbps<=15000,0,0,180000,Open,"Geico truTV Linear — Creative bitrate exceeds Roku limit — 18,500 kbps vs 15,000 kbps max — startup failures across 340K Roku households"
+ALT-0006,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-007,prime-time delivery < expected,within 10% of expected,62596,62596,95000,Open,Samsung Discovery+ — Prime-time delivery below expected — NBA playoff overrun consumed 6 ad pods — make-good queue building
+ALT-0007,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-017,prime-time delivery < expected,within 10% of expected,48856,48856,85000,Open,Nike Max Streaming — Prime-time delivery below expected — inventory exhausted on sports break pods — frequency cap too restrictive
+ALT-0008,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-027,prime-time delivery < expected,within 10% of expected,36053,36053,75000,Open,Apple Eurosport CTV — Prime-time delivery below expected — streaming inventory shortfall in peak window — cross-platform shift needed
+ALT-0009,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-037,prime-time delivery < expected,within 10% of expected,61763,61763,60000,Open,Coca-Cola Max Q4 — Prime-time delivery below expected — audience segment reach lower than forecast — targeting too narrow
+ALT-0010,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-047,prime-time delivery < expected,within 10% of expected,50919,50919,55000,Open,Geico truTV Linear — Prime-time delivery below expected — live event overrun displaced 4 ad breaks — 38 minutes over schedule
+ALT-0011,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-057,prime-time delivery < expected,within 10% of expected,64303,64303,48000,Open,Samsung Discovery+ — Prime-time delivery below expected — CDN node degradation impacting ad pod delivery in us-east-2b
+ALT-0012,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-067,prime-time delivery < expected,within 10% of expected,49870,49870,42000,Open,Nike Max Streaming — Prime-time delivery below expected — VAST fill rate dropped from 94% to 61% during peak hours
+ALT-0013,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-077,prime-time delivery < expected,within 10% of expected,74046,74046,38000,Open,Apple Eurosport CTV — Prime-time delivery below expected — cross-platform budget allocation skewed away from available inventory
+ALT-0014,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-087,prime-time delivery < expected,within 10% of expected,21855,21855,32000,Open,Coca-Cola Max Q4 — Prime-time delivery below expected — creative transcode rendition missing for connected TV devices
+ALT-0015,2024-07-12 20:00:00,Medium,Prime-Time Underdelivery,CMP-097,prime-time delivery < expected,within 10% of expected,14068,14068,28000,Open,Geico truTV Linear — Prime-time delivery below expected — frequency cap limiting reach to small audience pool

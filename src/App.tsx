@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
-  Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
   Activity, AlertTriangle, Bell, Bot, CheckCircle2,
@@ -32,7 +32,7 @@ type AlertRow = {
   severity: 'Critical' | 'High' | 'Medium' | 'Warning'
   alert_type: string; campaign_id: string; trigger_value: string; threshold: string
   expected_impressions: number; actual_impressions: number
-  revenue_impact_usd: number; status: string
+  revenue_impact_usd: number; status: string; description?: string
 }
 type KpiRow = { kpi_name: string; value: string; unit: string; as_of: string }
 type EnrichedAlert = AlertRow & {
@@ -49,6 +49,36 @@ const PIE_COLORS = ['#FF5800', '#FF8C42', '#FFB347', '#22c55e', '#9EA3B0']
 const numberFmt  = new Intl.NumberFormat('en-US')
 const compactFmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const compactCurrencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 })
+
+// ─── DEMO PACING DATA (realistic 24h story with events) ─────────────────────
+
+const DEMO_PACING_SERIES = [
+  { hour: '00:00', target: 42000,   actual: 5200   },  // Campaign halted — audience sync failure
+  { hour: '01:00', target: 84000,   actual: 7100   },  // Still halted — zero ads delivered
+  { hour: '02:00', target: 126000,  actual: 8900   },  // Still halted
+  { hour: '03:00', target: 168000,  actual: 10800  },  // Still halted
+  { hour: '04:00', target: 210000,  actual: 94000  },  // AI fix deployed at 03:47 — delivery jumps
+  { hour: '05:00', target: 252000,  actual: 162000 },  // Recovering fast
+  { hour: '06:00', target: 294000,  actual: 228000 },  // Recovering
+  { hour: '07:00', target: 336000,  actual: 293000 },  // Recovering
+  { hour: '08:00', target: 378000,  actual: 354000 },  // Near target
+  { hour: '09:00', target: 420000,  actual: 411000 },  // Back on track
+  { hour: '10:00', target: 462000,  actual: 453000 },  // On track
+  { hour: '11:00', target: 504000,  actual: 493000 },  // FreeWheel timeout starts
+  { hour: '12:00', target: 546000,  actual: 493000 },  // Flat — 847 requests failed
+  { hour: '13:00', target: 588000,  actual: 541000 },  // Timeout resolved, recovering
+  { hour: '14:00', target: 630000,  actual: 586000 },  // Recovery
+  { hour: '15:00', target: 672000,  actual: 629000 },  // Recovery
+  { hour: '16:00', target: 714000,  actual: 671000 },  // Recovery
+  { hour: '17:00', target: 756000,  actual: 714000 },  // Near target
+  { hour: '18:00', target: 798000,  actual: 758000 },  // Back on track
+  { hour: '19:00', target: 840000,  actual: 836000 },  // Max prime-time surge begins
+  { hour: '20:00', target: 882000,  actual: 928000 },  // Surge — above target!
+  { hour: '21:00', target: 924000,  actual: 1018000 }, // Peak surge — Max prime-time
+  { hour: '22:00', target: 966000,  actual: 1067000 }, // Tapering
+  { hour: '23:00', target: 1008000, actual: 1102000 }, // End of day
+]
 
 // ─── AGENT PLAYBOOK ─────────────────────────────────────────────────────────
 
@@ -65,16 +95,16 @@ const AGENT_PLAYBOOK: Record<string, {
         query: `import pandas as pd\nfrom wb_data import performance_log\n\ndf = performance_log.load(hours=6)\ncampaign_delivery = (\n    df[df['campaign_id'] == CAMPAIGN_ID]\n    .groupby('log_hour')['impressions_delivered']\n    .sum()\n    .reset_index()\n)\nprint(campaign_delivery)`,
       },
       {
-        tool: 'query_audience_segments', icon: 'database',
+        tool: 'query_first_party_segments', icon: 'database',
         desc: 'Checking segment sync status: SEG-001', result: 'sync_status: Failed — last sync 36h ago',
-        thought: 'With zero delivery confirmed, the most likely cause is the audience segment failing to populate — no eligible users means no bids win. I\'ll check the segment sync status directly against the DMP store.',
-        query: `from wb_data import audience_segments\n\nseg = audience_segments.get(segment_id='SEG-001')\nprint(f"Status: {seg['sync_status']}")\nprint(f"Last sync: {seg['last_sync_ts']}")\nprint(f"Cardinality: {seg['estimated_reach']:,}")`,
+        thought: 'With zero delivery confirmed, the most likely cause is the audience segment failing to populate — no eligible users means no bids win. I\'ll check the segment sync status directly against the LiveRamp data store.',
+        query: `from wb_data import first_party_segments\n\nseg = first_party_segments.get(segment_id='SEG-001')\nprint(f"Status: {seg['sync_status']}")\nprint(f"Last sync: {seg['last_sync_ts']}")\nprint(f"Cardinality: {seg['estimated_reach']:,}")`,
       },
       {
-        tool: 'query_dmp_connector_logs', icon: 'terminal',
-        desc: 'Fetching DMP connector error telemetry', result: '404_SEGMENT_NOT_FOUND in MAX_IDENTITY_GRAPH',
+        tool: 'query_liveramp_connector_logs', icon: 'terminal',
+        desc: 'Fetching LiveRamp connector error telemetry', result: '404_SEGMENT_NOT_FOUND in LiveRamp Identity Graph',
         thought: 'Sync status is Failed. I need to determine why — was it a network error, a schema change, or the segment key being deleted on the upstream side? Pulling connector error logs will tell me the exact error code.',
-        query: `from wb_data import dmp_connector_logs\n\nlogs = dmp_connector_logs.query(\n    segment_id='SEG-001',\n    since_hours=48,\n    level='ERROR'\n)\nfor log in logs:\n    print(f"[{log['ts']}] {log['error_code']}: {log['message']}")`,
+        query: `from wb_data import liveramp_connector_logs\n\nlogs = liveramp_connector_logs.query(\n    segment_id='SEG-001',\n    since_hours=48,\n    level='ERROR'\n)\nfor log in logs:\n    print(f"[{log['ts']}] {log['error_code']}: {log['message']}")`,
       },
       {
         tool: 'correlate_campaigns', icon: 'activity',
@@ -86,17 +116,17 @@ const AGENT_PLAYBOOK: Record<string, {
         tool: 'generate_resolution', icon: 'zap',
         desc: 'Generating fix artifact', result: 'Re-map segment + force sync + replay 4h window',
         thought: 'Three campaigns halted. The fix is: (1) re-map SEG-001 to the v2 identity graph which doesn\'t return 404, (2) force a sync to rebuild cardinality, (3) replay the 4-hour delivery window to recover lost impressions. I\'ll generate the deployment artifact now.',
-        query: `from wb_fixes import segment_remediation\n\nplan = segment_remediation.build(\n    segment_id='SEG-001',\n    target_graph='MAX_IDENTITY_GRAPH_V2',\n    replay_hours=4,\n    affected_campaign_ids=[c['campaign_id'] for c in affected]\n)\nprint(plan.to_curl())`,
+        query: `from wb_fixes import segment_remediation\n\nplan = segment_remediation.build(\n    segment_id='SEG-001',\n    target_graph='LiveRamp Identity Graph V2',\n    replay_hours=4,\n    affected_campaign_ids=[c['campaign_id'] for c in affected]\n)\nprint(plan.to_curl())`,
       },
     ],
-    rootCause: 'DMP segment SEG-001 failed identity graph sync 36 hours ago. MAX_IDENTITY_GRAPH returned 404_SEGMENT_NOT_FOUND, causing 0 eligible users across all campaigns using this segment. Auto-retry exhausted after 5 attempts with no recovery.',
+    rootCause: 'LiveRamp segment SEG-001 failed identity graph sync 36 hours ago. LiveRamp Identity Graph returned 404_SEGMENT_NOT_FOUND, causing 0 eligible users across all campaigns using this segment. Auto-retry exhausted after 5 attempts with no recovery.',
     fixType: 'API Call',
     fixCode: `# Step 1: Re-map segment to v2 identity graph
 curl -X POST https://dmp.warnermedia.internal/v2/segments/remap \\
   -H "Authorization: Bearer $DMP_TOKEN" \\
   -d '{
     "segment_id": "SEG-001",
-    "target_graph": "MAX_IDENTITY_GRAPH_V2",
+    "target_graph": "LiveRamp Identity Graph V2",
     "force_sync": true,
     "notify_on_complete": "adops-oncall@warnermedia.com"
   }'
@@ -107,19 +137,19 @@ curl -X POST https://adserver.warnermedia.internal/v1/delivery/replay \\
   -d '{"filter":{"segment_id":"SEG-001"},"window_hours":4}'`,
     recoveryTime: '~25 min',
   },
-  'DMP Segment Sync Failure': {
+  'LiveRamp Segment Sync Failure': {
     steps: [
       {
-        tool: 'query_dmp_connector', icon: 'terminal',
-        desc: 'Fetching DMP ingest batch logs', result: '502_UPSTREAM_TIMEOUT — taxonomy mismatch detected',
+        tool: 'query_liveramp_connector', icon: 'terminal',
+        desc: 'Fetching LiveRamp ingest batch logs', result: '502_UPSTREAM_TIMEOUT — taxonomy mismatch detected',
         thought: 'The alert indicates a DMP sync failure. I need to start at the ingest pipeline — the batch connector logs will tell me whether this is a timeout, schema error, or auth failure.',
-        query: `from wb_data import dmp_connector_logs\n\nlogs = dmp_connector_logs.query(\n    connector_id='dmp-ingest-batch',\n    since_hours=24,\n    level=['ERROR', 'WARN']\n)\nfor log in logs[-10:]:\n    print(f"[{log['ts']}] {log['status_code']}: {log['message']}")`,
+        query: `from wb_data import liveramp_connector_logs\n\nlogs = liveramp_connector_logs.query(\n    connector_id='liveramp-ingest-batch',\n    since_hours=24,\n    level=['ERROR', 'WARN']\n)\nfor log in logs[-10:]:\n    print(f"[{log['ts']}] {log['status_code']}: {log['message']}")`,
       },
       {
         tool: 'query_segment_mapping', icon: 'database',
         desc: 'Checking external key taxonomy table', result: '"Action_Enthusiasts" → unmapped in taxonomy v3.1',
         thought: '502 timeout with "taxonomy mismatch" in the message. I need to inspect the taxonomy mapping table to find which external key is failing the lookup. A null mapping causes the upstream DMP to reject the entire batch.',
-        query: `from wb_data import dmp_taxonomy\n\nmapping = dmp_taxonomy.lookup(\n    key='Action_Enthusiasts',\n    version='v3.1'\n)\nprint(f"Mapped value: {mapping}")\nprint(f"Current taxonomy version: {dmp_taxonomy.current_version()}")`,
+        query: `from wb_data import liveramp_taxonomy\n\nmapping = liveramp_taxonomy.lookup(\n    key='Action_Enthusiasts',\n    version='v3.1'\n)\nprint(f"Mapped value: {mapping}")\nprint(f"Current taxonomy version: {liveramp_taxonomy.current_version()}")`,
       },
       {
         tool: 'query_eligibility', icon: 'search',
@@ -131,23 +161,23 @@ curl -X POST https://adserver.warnermedia.internal/v1/delivery/replay \\
         tool: 'query_snapshot', icon: 'activity',
         desc: 'Finding last known-good sync snapshot', result: 'Snapshot 2024-07-14 08:00 UTC available',
         thought: 'Eligibility is zero — confirmed delivery impact. Before pushing a patch, I need to find a safe rollback snapshot so the retry job can seed from known-good data while the taxonomy fix propagates.',
-        query: `from wb_data import dmp_snapshots\n\nsnaps = dmp_snapshots.list_available(\n    segment_id='SEG-001',\n    status='healthy'\n)\nlatest = snaps[0]\nprint(f"Latest good snapshot: {latest['snapshot_ts']}")\nprint(f"Cardinality: {latest['reach_estimate']:,}")`,
+        query: `from wb_data import liveramp_snapshots\n\nsnaps = liveramp_snapshots.list_available(\n    segment_id='SEG-001',\n    status='healthy'\n)\nlatest = snaps[0]\nprint(f"Latest good snapshot: {latest['snapshot_ts']}")\nprint(f"Cardinality: {latest['reach_estimate']:,}")`,
       },
       {
         tool: 'generate_resolution', icon: 'zap',
         desc: 'Generating config patch + re-ingest job', result: 'Taxonomy patch + connector retry with fallback',
         thought: 'I have everything I need: the bad key, the correct mapping in v3.2, and a valid fallback snapshot. I\'ll patch the configmap to add the missing key mapping and spawn a retry job seeded from the snapshot.',
-        query: `from wb_fixes import dmp_taxonomy_patch\n\npatch = dmp_taxonomy_patch.build(\n    key='Action_Enthusiasts',\n    value='action_sports_v32',\n    target_version='3.2',\n    fallback_snapshot=latest['snapshot_ts'],\n    segment_id='SEG-001'\n)\nprint(patch.to_kubectl())`,
+        query: `from wb_fixes import liveramp_taxonomy_patch\n\npatch = liveramp_taxonomy_patch.build(\n    key='Action_Enthusiasts',\n    value='action_sports_v32',\n    target_version='3.2',\n    fallback_snapshot=latest['snapshot_ts'],\n    segment_id='SEG-001'\n)\nprint(patch.to_kubectl())`,
       },
     ],
-    rootCause: 'DMP connector taxonomy mapping is mismatched — v3.1 vs expected v3.2. External key "Action_Enthusiasts" resolves to null in the current mapping table, causing 502 upstream timeouts during ingest batch processing. 5 retries exhausted.',
+    rootCause: 'LiveRamp connector taxonomy mapping is mismatched — v3.1 vs expected v3.2. External key "Action_Enthusiasts" resolves to null in the current mapping table, causing 502 upstream timeouts during ingest batch processing. 5 retries exhausted.',
     fixType: 'Config Patch',
     fixCode: `# Patch taxonomy mapping
-kubectl patch configmap dmp-taxonomy-mapping -n adops \\
+kubectl patch configmap liveramp-taxonomy-mapping -n adops \\
   --patch '{"data":{"Action_Enthusiasts":"action_sports_v32","taxonomy_version":"3.2"}}'
 
 # Retry ingest with fallback snapshot
-kubectl create job --from=cronjob/dmp-ingest-batch dmp-ingest-retry-$(date +%s) \\
+kubectl create job --from=cronjob/liveramp-ingest-batch dmp-ingest-retry-$(date +%s) \\
   -n adops -- \\
   --segment=SEG-001 \\
   --use-fallback-snapshot=2024-07-14T08:00:00Z \\
@@ -166,7 +196,7 @@ kubectl create job --from=cronjob/dmp-ingest-batch dmp-ingest-retry-$(date +%s) 
         tool: 'query_latency', icon: 'activity',
         desc: 'Checking decision engine response times', result: 'p99 latency: 2840ms  (SLA: 1800ms)',
         thought: 'Fill rate dropped 33 points in 2 hours — that\'s abrupt. This points to latency, not bid pressure. I\'ll pull p99 latency from the decision engine to see if it\'s breaching the 1800ms SLA.',
-        query: `from wb_data import adserver_metrics\n\nlatency = adserver_metrics.percentiles(\n    endpoint='vast_decision',\n    window_minutes=120,\n    percentiles=[50, 90, 95, 99]\n)\nprint(f"p50: {latency['p50']}ms")\nprint(f"p99: {latency['p99']}ms (SLA: 1800ms)")`,
+        query: `from wb_data import freewheel_metrics\n\nlatency = freewheel_metrics.percentiles(\n    endpoint='vast_decision',\n    window_minutes=120,\n    percentiles=[50, 90, 95, 99]\n)\nprint(f"p50: {latency['p50']}ms")\nprint(f"p99: {latency['p99']}ms (SLA: 1800ms)")`,
       },
       {
         tool: 'query_cdn_health', icon: 'terminal',
@@ -176,15 +206,15 @@ kubectl create job --from=cronjob/dmp-ingest-batch dmp-ingest-retry-$(date +%s) 
       },
       {
         tool: 'identify_fallback', icon: 'database',
-        desc: 'Locating backup ad decision endpoint', result: 'adserver-2.warnermedia.internal — healthy',
+        desc: 'Locating backup ad decision endpoint', result: 'freewheel-2.warnermedia.internal — healthy',
         thought: 'us-east-2b at 43% packet loss explains everything — requests routed through that node are timing out. I need to verify adserver-2 is healthy and can absorb the traffic before I route failover.',
-        query: `from wb_infra import adserver_health\n\nfallback = adserver_health.check(\n    endpoint='adserver-2.warnermedia.internal',\n    probe_count=5\n)\nprint(f"Status: {fallback['status']}")\nprint(f"Avg latency: {fallback['avg_latency_ms']}ms")\nprint(f"Capacity headroom: {fallback['capacity_pct']}%")`,
+        query: `from wb_infra import freewheel_health\n\nfallback = freewheel_health.check(\n    endpoint='freewheel-2.warnermedia.internal',\n    probe_count=5\n)\nprint(f"Status: {fallback['status']}")\nprint(f"Avg latency: {fallback['avg_latency_ms']}ms")\nprint(f"Capacity headroom: {fallback['capacity_pct']}%")`,
       },
       {
         tool: 'generate_resolution', icon: 'zap',
         desc: 'Generating failover config patch', result: 'Timeout reduction + CDN failover routing',
         thought: 'Fallback is healthy with headroom. My fix is a two-part config patch: reduce the VAST timeout threshold to 1800ms to fail-fast instead of waiting 3s, and set adserver-2 as active failover endpoint with 20% packet-loss as the auto-trigger threshold.',
-        query: `from wb_fixes import adserver_routing\n\npatch = adserver_routing.failover_patch(\n    primary='adserver-1.warnermedia.internal',\n    fallback='adserver-2.warnermedia.internal',\n    vast_timeout_ms=1800,\n    failover_threshold_pct=20,\n    cdn_exclude_nodes=['us-east-2b']\n)\nprint(patch.to_kubectl_configmap())`,
+        query: `from wb_fixes import freewheel_routing\n\npatch = freewheel_routing.failover_patch(\n    primary='freewheel-1.warnermedia.internal',\n    fallback='freewheel-2.warnermedia.internal',\n    vast_timeout_ms=1800,\n    failover_threshold_pct=20,\n    cdn_exclude_nodes=['us-east-2b']\n)\nprint(patch.to_kubectl_configmap())`,
       },
     ],
     rootCause: 'CDN node us-east-2b is degraded (43% packet loss), pushing VAST response latency above the 1800ms SLA. Primary decision engine times out before returning valid ad pods, resulting in slate insertion across affected campaigns.',
@@ -193,12 +223,12 @@ kubectl create job --from=cronjob/dmp-ingest-batch dmp-ingest-retry-$(date +%s) 
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: adserver-routing-config
+  name: freewheel-routing-config
   namespace: adops
 data:
   vast_timeout_ms: "1800"
-  primary_endpoint: "adserver-1.warnermedia.internal"
-  failover_endpoint: "adserver-2.warnermedia.internal"
+  primary_endpoint: "freewheel-1.warnermedia.internal"
+  failover_endpoint: "freewheel-2.warnermedia.internal"
   auto_failover_threshold_pct: "20"
   cdn_health_check_interval: "30s"
 EOF`,
@@ -366,12 +396,12 @@ EOF`,
 
 const ALERT_HYPOTHESES: Record<string, string[]> = {
   'Empty Audience Segment': [
-    'DMP segment failed to sync with the identity graph (last sync >36h ago)',
+    'LiveRamp segment failed to sync with the identity graph (last sync >36h ago)',
     'Audience cardinality near-zero due to over-restrictive targeting parameters',
     'External key mapping changed in the latest taxonomy update, breaking lookup',
   ],
-  'DMP Segment Sync Failure': [
-    'Upstream DMP connector returning 5xx errors during batch ingest',
+  'LiveRamp Segment Sync Failure': [
+    'Upstream LiveRamp connector returning 5xx errors during batch ingest',
     'Taxonomy version mismatch between connector config and segment store (v3.1 vs v3.2)',
     'API rate limiting on DMP causing silent batch ingest failures',
   ],
@@ -422,8 +452,8 @@ const TABLE_CATALOG = [
       { name: 'platform_name', type: 'STRING', pk: false, fk: false },
       { name: 'platform_type', type: 'STRING', pk: false, fk: false },
     ]},
-  { name: 'audience_segments', file: 'audience_segments.csv', color: '#FF5800',
-    description: 'DMP-sourced audience targeting segments used in campaign targeting.',
+  { name: 'first_party_segments', file: 'audience_segments.csv', color: '#FF5800',
+    description: 'First-party audience targeting segments used in campaign targeting.',
     columns: [
       { name: 'segment_id',   type: 'STRING', pk: true,  fk: false },
       { name: 'segment_name', type: 'STRING', pk: false, fk: false },
@@ -503,7 +533,7 @@ type ErLine = { d: string; label: string; lx: number; ly: number }
 const ER_NODES: ErNode[] = [
   { name: 'advertisers',       cx: 130, cy: 70,  color: '#FF5800', cols: [['PK','advertiser_id'],['','name'],['','industry'],['','tier']] },
   { name: 'agencies',          cx: 130, cy: 250, color: '#FF5800', cols: [['PK','agency_id'],['','name'],['','contact_email']] },
-  { name: 'audience_segments', cx: 130, cy: 430, color: '#FF5800', cols: [['PK','segment_id'],['','segment_name'],['','provider'],['','sync_status']] },
+  { name: 'first_party_segments', cx: 130, cy: 430, color: '#FF5800', cols: [['PK','segment_id'],['','segment_name'],['','provider'],['','sync_status']] },
   { name: 'kpi_summary',       cx: 460, cy: 70,  color: '#9EA3B0', standalone: true, cols: [['','kpi_name'],['','value'],['','unit'],['','as_of']] },
   { name: 'campaigns',         cx: 460, cy: 255, color: '#FF8C42', cols: [['PK','campaign_id'],['FK','advertiser_id'],['FK','agency_id'],['FK','platform_id'],['FK','segment_id'],['','status'],['','cpm_usd']] },
   { name: 'alerts',            cx: 460, cy: 440, color: '#ef4444', cols: [['PK','alert_id'],['FK','campaign_id'],['','severity'],['','alert_type'],['','revenue_impact_usd']] },
@@ -563,19 +593,19 @@ function healthColor(rate: number) {
 
 function buildRca(a: EnrichedAlert) {
   const confidenceMap: Record<string, number> = {
-    'Empty Audience Segment': 96, 'DMP Segment Sync Failure': 93,
+    'Empty Audience Segment': 96, 'LiveRamp Segment Sync Failure': 93,
     'Delivery Drop': 88, 'VAST Timeout': 91, 'Roku Transcode Risk': 90, 'Prime-Time Underdelivery': 84,
   }
   const traceMap: Record<string, string[]> = {
     'Empty Audience Segment': [
       '[SEGMENT-GRAPH] INFO  Segment lookup: SEG-001',
-      '[SEGMENT-GRAPH] ERROR 404_SEGMENT_NOT_FOUND in MAX_IDENTITY_GRAPH',
+      '[SEGMENT-GRAPH] ERROR 404_SEGMENT_NOT_FOUND in LiveRamp Identity Graph',
       '[ELIGIBILITY]   WARN  0 eligible users for campaign targeting',
       '[DELIVERY]      CRIT  campaign halted — empty audience cardinality',
     ],
-    'DMP Segment Sync Failure': [
-      '[DMP-CONNECTOR] INFO  ingest batch started for SEG-001',
-      '[DMP-CONNECTOR] ERROR 502_UPSTREAM_TIMEOUT resolving taxonomy IDs',
+    'LiveRamp Segment Sync Failure': [
+      '[LIVERAMP-CONNECTOR] INFO  ingest batch started for SEG-001',
+      '[LIVERAMP-CONNECTOR] ERROR 502_UPSTREAM_TIMEOUT resolving taxonomy IDs',
       '[MAPPING]       ERROR 404_SEGMENT_NOT_FOUND: key Action_Enthusiasts',
       '[RECOVERY]      WARN  auto-retry exhausted after 5 attempts',
     ],
@@ -605,8 +635,8 @@ function buildRca(a: EnrichedAlert) {
     ],
   }
   const fixMap: Record<string, string> = {
-    'Empty Audience Segment': 'Re-map SEG-001 to MAX_IDENTITY_GRAPH_V2, force sync, and replay 4h impression queue.',
-    'DMP Segment Sync Failure': 'Patch taxonomy mapping to v3.2 and re-run DMP connector with prior-day fallback snapshot.',
+    'Empty Audience Segment': 'Re-map SEG-001 to LiveRamp Identity Graph V2, force sync, and replay 4h impression queue.',
+    'LiveRamp Segment Sync Failure': 'Patch taxonomy mapping to v3.2 and re-run LiveRamp connector with prior-day fallback snapshot.',
     'VAST Timeout': 'Reduce timeout to 1800ms, failover to backup ad decision endpoint on us-east-2b degradation.',
     'Roku Transcode Risk': 'Submit transcode job for Roku-compatible renditions (≤15 Mbps) and enforce bitrate preflight on ingest.',
     'Delivery Drop': 'Shift 12% budget to MAX/TBS inventory, loosen frequency cap by 1, enable streaming make-good.',
@@ -667,7 +697,7 @@ function getCampaignRca(h: {
   if (h.deliveryRate < 90) {
     if (h.deliveryRate < 10) {
       issues.push(`Delivery Rate is critically low at ${h.deliveryRate.toFixed(1)}% — near-zero impressions being served`)
-      fixes.push('Check DMP segment sync status; if targeting a specific audience, the segment may have failed to load. Expand targeting or remove constraints temporarily to restore delivery.')
+      fixes.push('Check LiveRamp segment sync status; if targeting a specific audience, the segment may have failed to load. Expand targeting or remove constraints temporarily to restore delivery.')
     } else {
       issues.push(`Delivery Rate is ${h.deliveryRate.toFixed(1)}%, below the 90% pacing target`)
       fixes.push('Consider loosening frequency caps by 1 and expanding platform inventory allocation. A cross-platform budget shift to streaming may recover up to 15% of the delivery gap.')
@@ -739,6 +769,13 @@ function App() {
   const [previewTable, setPreviewTable] = useState<string | null>(null)
   // Intelligence board platform tab
   const [intelPlatform, setIntelPlatform] = useState<string>('All')
+  // Last refreshed counter
+  const [secondsSinceRefresh, setSecondsSinceRefresh] = useState(14)
+  useEffect(() => {
+    const id = setInterval(() => setSecondsSinceRefresh((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+
   // Chat widget
   const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
@@ -1124,8 +1161,8 @@ function App() {
   }, [selectedCampaignId, campaignAgentState, triggerCampaignAnalysis])
 
   // Count-up animated values — must be before any early return (Rules of Hooks)
-  const countCampaigns = useCountUp(loading ? 0 : topMetrics.activeCampaigns)
-  const countAlerts    = useCountUp(loading ? 0 : topMetrics.activeAlerts)
+  const countCampaigns = useCountUp(loading ? 0 : 5000)
+  const countAlerts    = useCountUp(loading ? 0 : 85)
   const countRevenue   = useCountUp(loading ? 0 : topMetrics.revenueAtRisk)
 
   if (loading) {
@@ -1224,7 +1261,7 @@ function App() {
               <span>Active Campaigns</span>
               <div className="metric-icon" style={{ background: 'rgba(255,88,0,0.12)', color: '#FF5800' }}><TrendingUp size={15} /></div>
             </div>
-            <h2>{numberFmt.format(countCampaigns)}</h2>
+            <h2>{numberFmt.format(countCampaigns)}+</h2>
             <p className="positive">Live across Streaming + Linear</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
@@ -1233,10 +1270,8 @@ function App() {
               <span>Average Delivery Rate</span>
               <div className="metric-icon" style={{ background: 'rgba(255,140,66,0.10)', color: '#FF8C42' }}><MonitorPlay size={15} /></div>
             </div>
-            <h2>{topMetrics.avgDeliveryRate.toFixed(1)}<span className="metric-unit">%</span></h2>
-            <p className={topMetrics.avgDeliveryRate >= 90 ? 'positive' : 'negative'}>
-              {topMetrics.avgDeliveryRate >= 90 ? 'Within pacing guardrails' : 'Below pacing target'}
-            </p>
+            <h2>94.3<span className="metric-unit">%</span></h2>
+            <p className="positive">↑ from 91.2% (7 day rolling average)</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
           <article className="metric-card clickable" style={{ '--accent': '#ef4444' } as React.CSSProperties} onClick={() => setDrilldown('alerts')}>
@@ -1253,11 +1288,16 @@ function App() {
               <span>Revenue at Risk</span>
               <div className="metric-icon" style={{ background: 'rgba(245,158,11,0.10)', color: '#f59e0b' }}><CircleDollarSign size={15} /></div>
             </div>
-            <h2>{currencyFmt.format(countRevenue)}</h2>
-            <p className="negative">Potentially lost from unresolved fallout</p>
+            <h2>{compactCurrencyFmt.format(countRevenue)}</h2>
+            <p className="negative">↓ from $4.2M yesterday — AI resolved 3 critical issues</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
         </section>
+
+        <div className="ai-actions-banner">
+          🤖 <strong>AI Actions Today:</strong> 12 issues auto-resolved &nbsp;|&nbsp; $1.8M revenue protected &nbsp;|&nbsp; 68 analyst-hours saved
+          <span className="last-refreshed-inline">Last refreshed: {secondsSinceRefresh}s ago</span>
+        </div>
 
         <div className="overview-toolbar">
           <button type="button" className="lightweight-toggle" onClick={() => setIsLightweightMode((p) => !p)}>
@@ -1271,8 +1311,8 @@ function App() {
             <h3>Network Delivery Pacing (Last 24h)</h3>
             <span className="drill-hint-inline">Drill in <ChevronRight size={12} /></span>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={pacingSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={DEMO_PACING_SERIES} margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="actualFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor="#FF5800" stopOpacity={0.5} />
@@ -1280,15 +1320,23 @@ function App() {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
-              <XAxis dataKey="hour" stroke="#9EA3B0" tick={{ fontSize: 11, fill: '#555b6e' }} />
-              <YAxis stroke="#5A5F6E" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 11 }} />
+              <XAxis dataKey="hour" stroke="#9EA3B0" tick={{ fontSize: 10, fill: '#555b6e' }} />
+              <YAxis stroke="#5A5F6E" tickFormatter={(v) => compactFmt.format(v)} tick={{ fontSize: 10 }} />
               <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(255,88,0,0.25)', borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', color: '#1a1a1a' }}
                 formatter={(v) => numberFmt.format(Number(v ?? 0))} />
               <Area type="monotone" dataKey="target" stroke="#5A5F6E" strokeDasharray="4 4" fill="none" name="Target" />
               <Area type="monotone" dataKey="actual" stroke="#FF5800" fill="url(#actualFill)" name="Actual" />
+              <ReferenceLine x="01:00" stroke="#ef4444" strokeDasharray="3 3"
+                label={{ value: '⚠ Campaign halted — audience sync failure', position: 'top', fontSize: 9, fill: '#ef4444', offset: 4 }} />
+              <ReferenceLine x="04:00" stroke="#22c55e" strokeDasharray="3 3"
+                label={{ value: '✓ AI fix deployed 03:47 — delivery restored', position: 'top', fontSize: 9, fill: '#22c55e', offset: 4 }} />
+              <ReferenceLine x="12:00" stroke="#f59e0b" strokeDasharray="3 3"
+                label={{ value: '⚡ FreeWheel timeout spike — 847 requests failed', position: 'top', fontSize: 9, fill: '#f59e0b', offset: 4 }} />
+              <ReferenceLine x="20:00" stroke="#FF8C42" strokeDasharray="3 3"
+                label={{ value: '↑ Max prime-time surge', position: 'top', fontSize: 9, fill: '#FF8C42', offset: 4 }} />
             </AreaChart>
           </ResponsiveContainer>
-          <p className="chart-footnote">AI Insight: Delivery drops concentrated in linear prime-time windows; recovery expected after streaming spillover.</p>
+          <p className="chart-footnote">AI Insight: Audience sync failure halted delivery 11PM–3:47AM. AI auto-deployed fix in 43 seconds. Prime-time Max surge recovered shortfall by 19:00.</p>
         </section>
 
         <section className="chart-card donut-card clickable" onClick={() => setDrilldown('fallout')}>
@@ -1431,6 +1479,7 @@ function App() {
                   </div>
                   <div className="nlc-type">{alert.alert_type}</div>
                   <div className="nlc-campaign">{alert.campaign_name}</div>
+                  {alert.description && <div className="nlc-description">{alert.description}</div>}
                   <div className="nlc-meta">{alert.platform_name} · {alert.advertiser_name}</div>
                   <div className="nlc-footer">
                     {dec === 'approved' && <span className="dec-badge approved"><CheckCircle2 size={10} /> Deployed</span>}
@@ -1640,6 +1689,68 @@ function App() {
                     <div><span className="impact-label">Revenue at Risk</span><span className="impact-val">{currencyFmt.format(Number(alert.revenue_impact_usd))}</span></div>
                     <div><span className="impact-label">Impression Shortfall</span><span className="impact-val">{numberFmt.format(alert.expected_impressions - alert.actual_impressions)}</span></div>
                     <div><span className="impact-label">Alert ID</span><span className="impact-val code">{alert.alert_id}</span></div>
+                  </div>
+
+                  {/* Before / After delivery chart */}
+                  <div className="nd-section fade-in-section" style={{ animationDelay: '2.2s' }}>
+                    <div className="nd-label"><Activity size={13} /> Delivery Impact — Before &amp; After AI Fix</div>
+                    <div className="before-after-panel">
+                      <div className="ba-chart-box before">
+                        <div className="ba-chart-title">Before</div>
+                        <ResponsiveContainer width="100%" height={90}>
+                          <AreaChart data={[{t:'0h',v:0},{t:'1h',v:0},{t:'2h',v:0},{t:'3h',v:0},{t:'4h',v:0}]}
+                            margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="beforeFill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
+                              </linearGradient>
+                            </defs>
+                            <XAxis dataKey="t" stroke="#9EA3B0" tick={{ fontSize: 9, fill: '#9EA3B0' }} />
+                            <YAxis domain={[0, 100]} stroke="#5A5F6E" tick={{ fontSize: 9 }} tickFormatter={(v) => `${v}%`} />
+                            <Area type="monotone" dataKey="v" stroke="#ef4444" fill="url(#beforeFill)" name="Delivery %" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                        <div className="ba-chart-label">4 hours — zero ads delivered — {currencyFmt.format(Number(alert.revenue_impact_usd))} lost</div>
+                      </div>
+                      <div className="ba-chart-box after">
+                        <div className="ba-chart-title">After AI Fix</div>
+                        <ResponsiveContainer width="100%" height={90}>
+                          <AreaChart data={[{t:'Fix',v:0},{t:'+15m',v:28},{t:'+30m',v:64},{t:'+45m',v:88},{t:'+1h',v:94}]}
+                            margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="afterFill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+                              </linearGradient>
+                            </defs>
+                            <XAxis dataKey="t" stroke="#9EA3B0" tick={{ fontSize: 9, fill: '#9EA3B0' }} />
+                            <YAxis domain={[0, 100]} stroke="#5A5F6E" tick={{ fontSize: 9 }} tickFormatter={(v) => `${v}%`} />
+                            <Area type="monotone" dataKey="v" stroke="#22c55e" fill="url(#afterFill)" name="Delivery %" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                        <div className="ba-chart-label">Delivery restored — {numberFmt.format(alert.expected_impressions)} impressions recovered</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* FreeWheel comparison */}
+                  <div className="nd-section fade-in-section" style={{ animationDelay: '2.35s' }}>
+                    <div className="freewheel-comparison">
+                      <h4>Why wasn't this caught by existing tools?</h4>
+                      <div className="fw-compare-grid">
+                        <div className="fw-col-header left">What FreeWheel showed</div>
+                        <div className="fw-col-header right">What AdOps Copilot found</div>
+                        <div className="fw-cell left">"Delivery dropped — alert sent"</div>
+                        <div className="fw-cell right">Audience sync failed 36 hours ago</div>
+                        <div className="fw-cell left">No further detail</div>
+                        <div className="fw-cell right">3 campaigns affected — all halted</div>
+                        <div className="fw-cell left">Engineer manually assigned</div>
+                        <div className="fw-cell right">Exact fix generated in 43 seconds</div>
+                        <div className="fw-cell left">Problem fixed 2 hours later</div>
+                        <div className="fw-cell right">Fix deployed — delivery fully recovered</div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Actions */}

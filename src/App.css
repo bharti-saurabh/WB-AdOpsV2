@@ -2678,3 +2678,109 @@ body {
   .nd-impact { grid-template-columns: 1fr; }
   .ex-table-grid { grid-template-columns: 1fr; }
 }
+
+/* ── AI Actions Banner ──────────────────────────────────────────────────────── */
+.ai-actions-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #10131f;
+  border-left: 3px solid #FF5800;
+  color: #e2e4ec;
+  font-size: 0.82rem;
+  padding: 10px 20px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.ai-actions-banner strong { color: #FF8C42; }
+.last-refreshed-inline {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Pacing chart event flag labels ────────────────────────────────────────── */
+.pacing-flag-label {
+  font-size: 9px;
+  fill: currentColor;
+}
+
+/* ── Before/After delivery chart panel ─────────────────────────────────────── */
+.before-after-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.ba-chart-box {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 12px;
+}
+.ba-chart-box.before { border-color: rgba(239,68,68,0.3); }
+.ba-chart-box.after  { border-color: rgba(34,197,94,0.3); }
+.ba-chart-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.ba-chart-box.before .ba-chart-title { color: #ef4444; }
+.ba-chart-box.after  .ba-chart-title { color: #22c55e; }
+.ba-chart-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* ── FreeWheel comparison box ──────────────────────────────────────────────── */
+.freewheel-comparison {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,88,0,0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 8px 0;
+}
+.freewheel-comparison h4 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.fw-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  font-size: 0.75rem;
+}
+.fw-col-header {
+  font-weight: 600;
+  font-size: 0.7rem;
+  padding: 6px 8px;
+  border-radius: 4px 4px 0 0;
+}
+.fw-col-header.left  { background: rgba(239,68,68,0.12); color: #ef4444; }
+.fw-col-header.right { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.fw-cell {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.fw-cell.right { color: #a7f3d0; }
+
+/* ── Alert description in notification list ────────────────────────────────── */
+.nlc-description {
+  font-size: 0.71rem;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+  line-height: 1.4;
+  opacity: 0.85;
+}
