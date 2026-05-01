@@ -2283,6 +2283,30 @@ body {
 .hd-rec-box p { margin: 0; font-size: 0.77rem; color: var(--text-secondary); line-height: 1.55; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   EXPLORER TOOLBAR
+───────────────────────────────────────────────────────────────────────────── */
+.ex-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.ex-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ex-toolbar-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    OVERVIEW TOOLBAR (lightweight toggle strip)
 ───────────────────────────────────────────────────────────────────────────── */
 .overview-toolbar {
@@ -2636,15 +2660,17 @@ body {
 ───────────────────────────────────────────────────────────────────────────── */
 @media print {
   .top-nav, .chat-widget, .board-platform-tabs, .board-pdf-btn,
-  .board-refresh-badge, .btn-approve, .btn-reject { display: none !important; }
-  .intel-shell { margin: 0; padding: 0; }
-  .board-chart-card, .board-kpi-tile, .board-insight-card, .board-table-card {
-    break-inside: avoid;
-    box-shadow: none;
-  }
+  .board-refresh-badge, .btn-approve, .btn-reject,
+  .ex-toolbar, .ex-btn-preview, .ex-btn-download { display: none !important; }
+  .intel-shell, .explorer-shell { margin: 0; padding: 0; }
+  .board-chart-card, .board-kpi-tile, .board-insight-card, .board-table-card,
+  .ex-table-card, .kpi-card, .ex-er-wrap { break-inside: avoid; box-shadow: none; }
+  .ex-table-grid { grid-template-columns: repeat(3, 1fr) !important; }
+  .ex-er-svg { width: 100%; height: auto; }
   body { background: #fff !important; }
   .app-shell { overflow: visible !important; }
   .bg-canvas { display: none !important; }
+  @page { margin: 1.5cm; size: A4 landscape; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

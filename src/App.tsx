@@ -2318,6 +2318,19 @@ function App() {
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === 'explorer' && (
       <main key="explorer" className="explorer-shell tab-content">
+
+        {/* Explorer header with PDF download */}
+        <div className="ex-toolbar">
+          <div className="ex-toolbar-left">
+            <Database size={15} />
+            <span>Data Explorer</span>
+            <span className="ex-toolbar-sub">Schema · ER Diagram · KPI Formulas</span>
+          </div>
+          <button type="button" className="board-pdf-btn" onClick={() => window.print()}>
+            <Database size={12} /> Export PDF
+          </button>
+        </div>
+
         <section className="ex-section">
           <div className="ex-section-head"><Table2 size={17} /><h2>Data Catalog</h2><span className="ex-badge">9 tables</span></div>
           <div className="ex-table-grid">
