@@ -1052,11 +1052,14 @@ function App() {
   const intelPlatformSummary = useMemo(() => {
     const { fillRate, vcr, slaComp, pltCampaigns, alertCount, atRisk } = intelPlatformKpis
     const name = intelPlatform === 'All' ? 'across all platforms' : `on ${intelPlatform}`
+    const totalCamps = intelPlatform === 'All'
+      ? `${Number(kpis.find((k) => k.kpi_name === 'Total Campaigns')?.value ?? 5247).toLocaleString()}+`
+      : `${pltCampaigns}`
     const fillHealth = fillRate >= 85 ? 'strong' : fillRate >= 70 ? 'moderate' : 'poor'
     const vcrHealth  = vcr >= 70 ? 'healthy' : vcr >= 50 ? 'acceptable' : 'below benchmark'
     const slaHealth  = slaComp >= 90 ? 'meeting SLA' : 'breaching SLA'
-    return `${pltCampaigns} active campaign${pltCampaigns !== 1 ? 's' : ''} ${name}. Fill rate is ${fillHealth} at ${fillRate.toFixed(1)}%, video completion is ${vcrHealth} at ${vcr.toFixed(1)}%, and VAST latency is ${slaHealth} (${slaComp.toFixed(1)}% of requests under 1800ms). ${alertCount > 0 ? `${alertCount} open alert${alertCount !== 1 ? 's' : ''} account for ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(atRisk)} in revenue exposure.` : 'No open alerts — platform health is normal.'} ${fillRate < 75 ? 'Recommend investigating inventory availability and targeting constraints.' : vcr < 50 ? 'Creative engagement is low — consider A/B testing shorter ad formats.' : alertCount > 0 ? 'Review and resolve open alerts in the Notifications tab to reduce revenue exposure.' : 'Platform health indicators are within normal range.'}`
-  }, [intelPlatformKpis, intelPlatform])
+    return `${totalCamps} active campaign${intelPlatform === 'All' ? 's' : pltCampaigns !== 1 ? 's' : ''} ${name}. Fill rate is ${fillHealth} at ${fillRate.toFixed(1)}%, video completion is ${vcrHealth} at ${vcr.toFixed(1)}%, and VAST latency is ${slaHealth} (${slaComp.toFixed(1)}% of requests under 1800ms). ${alertCount > 0 ? `${alertCount} open alert${alertCount !== 1 ? 's' : ''} account for ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(atRisk)} in revenue exposure.` : 'No open alerts — platform health is normal.'} ${fillRate < 75 ? 'Recommend investigating inventory availability and targeting constraints.' : vcr < 50 ? 'Creative engagement is low — consider A/B testing shorter ad formats.' : alertCount > 0 ? 'Review and resolve open alerts in the Notifications tab to reduce revenue exposure.' : 'Platform health indicators are within normal range.'}`
+  }, [intelPlatformKpis, intelPlatform, kpis])
 
   // ── Intelligence Board: hourly engagement scoped to platform
   const intelPlatformEngagement = useMemo(() => {
@@ -1183,9 +1186,10 @@ function App() {
     }
   }, [selectedCampaignId, campaignAgentState, triggerCampaignAnalysis])
 
-  // Count-up animated values — must be before any early return (Rules of Hooks)
-  const countCampaigns = useCountUp(loading ? 0 : 5000)
-  const countAlerts    = useCountUp(loading ? 0 : 85)
+  // Count-up animated values — driven from data, must be before early return (Rules of Hooks)
+  const totalCampaignsKpi = Number(kpis.find((k) => k.kpi_name === 'Total Campaigns')?.value ?? 5247)
+  const countCampaigns = useCountUp(loading ? 0 : totalCampaignsKpi)
+  const countAlerts    = useCountUp(loading ? 0 : topMetrics.activeAlerts)
 
   if (loading) {
     return (
@@ -1310,7 +1314,7 @@ function App() {
               <span>Revenue at Risk</span>
               <div className="metric-icon" style={{ background: 'rgba(245,158,11,0.10)', color: '#f59e0b' }}><CircleDollarSign size={15} /></div>
             </div>
-            <h2>$3.2M</h2>
+            <h2>${compactFmt.format(topMetrics.revenueAtRisk)}</h2>
             <p className="negative">↓ from $4.2M yesterday · 3 issues AI-resolved</p>
             <span className="drill-hint">Explore breakdown <ChevronRight size={11} /></span>
           </article>
