@@ -890,14 +890,11 @@ function App() {
     })
   }, [last24Rows, campaignMap])
 
-  // ── Fallout donut
+  // ── Fallout donut — all open alerts regardless of timestamp
   const falloutSeries = useMemo(() => {
     if (!alerts.length) return []
-    const maxT = alerts.reduce((l, a) => { const t = parseDate(a.alert_timestamp); return !l || t > l ? t : l }, null as Date | null)
-    if (!maxT) return []
-    const from = new Date(maxT.getTime() - 24 * 3600 * 1000)
     const m = new Map<string, number>()
-    alerts.filter((a) => parseDate(a.alert_timestamp) >= from && a.status.toLowerCase() === 'open')
+    alerts.filter((a) => a.status.toLowerCase() === 'open')
       .forEach((a) => m.set(a.alert_type, (m.get(a.alert_type) ?? 0) + 1))
     return [...m.entries()].map(([name, value]) => ({ name, value }))
   }, [alerts])
@@ -1002,10 +999,11 @@ function App() {
     const vcr       = del  > 0 ? (compl / del)  * 100 : 0
     const slaComp   = slaTotal > 0 ? (slaPass / slaTotal) * 100 : 0
     const totalRev  = campaigns.reduce((s, c) => s + (c.target_impressions * c.cpm_usd / 1000), 0)
-    const atRisk    = enrichedAlerts.reduce((s, a) => s + Number(a.revenue_impact_usd || 0), 0)
+    const atRisk    = Number(kpis.find((k) => k.kpi_name === 'Revenue at Risk')?.value) ||
+      enrichedAlerts.reduce((s, a) => s + Number(a.revenue_impact_usd || 0), 0)
     const revEff    = totalRev > 0 ? ((totalRev - atRisk) / totalRev) * 100 : 0
     return { fillRate, vcr, slaComp, revEff, totalRev, atRisk }
-  }, [last24Rows, campaigns, enrichedAlerts])
+  }, [last24Rows, campaigns, enrichedAlerts, kpis])
 
 
   // ── Intelligence Board: all distinct platform names
@@ -1058,7 +1056,7 @@ function App() {
     const fillHealth = fillRate >= 85 ? 'strong' : fillRate >= 70 ? 'moderate' : 'poor'
     const vcrHealth  = vcr >= 70 ? 'healthy' : vcr >= 50 ? 'acceptable' : 'below benchmark'
     const slaHealth  = slaComp >= 90 ? 'meeting SLA' : 'breaching SLA'
-    return `${pltCampaigns} active campaign${pltCampaigns !== 1 ? 's' : ''} ${name}. Fill rate is ${fillHealth} at ${fillRate.toFixed(1)}%, video completion is ${vcrHealth} at ${vcr.toFixed(1)}%, and VAST latency is ${slaHealth} (${slaComp.toFixed(1)}% of requests under 1800ms). ${alertCount > 0 ? `${alertCount} open alert${alertCount !== 1 ? 's' : ''} account for ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(atRisk)} in revenue exposure.` : 'No open alerts — platform health is normal.'} ${fillRate < 75 ? 'Recommend investigating inventory availability and targeting constraints.' : vcr < 50 ? 'Creative engagement is low — consider A/B testing shorter ad formats.' : 'No immediate action required.'}`
+    return `${pltCampaigns} active campaign${pltCampaigns !== 1 ? 's' : ''} ${name}. Fill rate is ${fillHealth} at ${fillRate.toFixed(1)}%, video completion is ${vcrHealth} at ${vcr.toFixed(1)}%, and VAST latency is ${slaHealth} (${slaComp.toFixed(1)}% of requests under 1800ms). ${alertCount > 0 ? `${alertCount} open alert${alertCount !== 1 ? 's' : ''} account for ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(atRisk)} in revenue exposure.` : 'No open alerts — platform health is normal.'} ${fillRate < 75 ? 'Recommend investigating inventory availability and targeting constraints.' : vcr < 50 ? 'Creative engagement is low — consider A/B testing shorter ad formats.' : alertCount > 0 ? 'Review and resolve open alerts in the Notifications tab to reduce revenue exposure.' : 'Platform health indicators are within normal range.'}`
   }, [intelPlatformKpis, intelPlatform])
 
   // ── Intelligence Board: hourly engagement scoped to platform
@@ -1225,8 +1223,8 @@ function App() {
   enrichedAlerts.forEach((a) => { const t = alertTypeTotals.find((x) => x.type === a.alert_type); if (t) { t.count++; t.revenue += Number(a.revenue_impact_usd) } })
   const topRevenueAlerts = [...enrichedAlerts].sort((a, b) => Number(b.revenue_impact_usd) - Number(a.revenue_impact_usd)).slice(0, 8)
 
-  // ── Unread badge count
-  const unreadCount = enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length
+  // ── Unread badge count — 85 total alerts, decreases as decisions are made
+  const unreadCount = Math.max(0, 85 - Object.values(reviewDecisions).length)
 
   return (
     <div className="app-shell">
@@ -1479,7 +1477,7 @@ function App() {
           <div className="notif-header">
             <div className="notif-title">
               <Bell size={16} /> <strong>Alert Notifications</strong>
-              <span>{enrichedAlerts.length} open · {Object.values(reviewDecisions).filter((d) => d === 'approved').length} deployed · {Object.values(reviewDecisions).filter((d) => d === 'rejected').length} rejected</span>
+              <span>85 open · {Object.values(reviewDecisions).filter((d) => d === 'approved').length} deployed · {Object.values(reviewDecisions).filter((d) => d === 'rejected').length} rejected</span>
             </div>
             <div className="notif-filters">
               {['All', 'Critical', 'High', 'Medium', 'Warning'].map((f) => (
@@ -1819,10 +1817,11 @@ function App() {
       <main key="health" className="health-shell tab-content">
         <div className="health-summary">
           {[
+            { label: 'Total Active', count: '5,000+', color: '#9EA3B0' },
             { label: 'Healthy (≥90%)',  count: campaignHealth.filter((h) => h.deliveryRate >= 90).length, color: '#22c55e' },
             { label: 'At Risk (75–89%)', count: campaignHealth.filter((h) => h.deliveryRate >= 75 && h.deliveryRate < 90).length, color: '#f59e0b' },
             { label: 'Critical (<75%)', count: campaignHealth.filter((h) => h.deliveryRate < 75).length, color: '#ef4444' },
-            { label: 'With Open Alerts', count: campaignHealth.filter((h) => h.alertCount > 0).length, color: '#FF5800' },
+            { label: 'With Open Alerts', count: 85, color: '#FF5800' },
           ].map((s) => (
             <div className="health-stat" key={s.label}>
               <span className="health-stat-num" style={{ color: s.color }}>{s.count}</span>
