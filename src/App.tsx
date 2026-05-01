@@ -999,11 +999,10 @@ function App() {
     const vcr       = del  > 0 ? (compl / del)  * 100 : 0
     const slaComp   = slaTotal > 0 ? (slaPass / slaTotal) * 100 : 0
     const totalRev  = campaigns.reduce((s, c) => s + (c.target_impressions * c.cpm_usd / 1000), 0)
-    const atRisk    = Number(kpis.find((k) => k.kpi_name === 'Revenue at Risk')?.value) ||
-      enrichedAlerts.reduce((s, a) => s + Number(a.revenue_impact_usd || 0), 0)
+    const atRisk    = enrichedAlerts.reduce((s, a) => s + Number(a.revenue_impact_usd || 0), 0)
     const revEff    = totalRev > 0 ? ((totalRev - atRisk) / totalRev) * 100 : 0
     return { fillRate, vcr, slaComp, revEff, totalRev, atRisk }
-  }, [last24Rows, campaigns, enrichedAlerts, kpis])
+  }, [last24Rows, campaigns, enrichedAlerts])
 
 
   // ── Intelligence Board: all distinct platform names
@@ -1223,8 +1222,8 @@ function App() {
   enrichedAlerts.forEach((a) => { const t = alertTypeTotals.find((x) => x.type === a.alert_type); if (t) { t.count++; t.revenue += Number(a.revenue_impact_usd) } })
   const topRevenueAlerts = [...enrichedAlerts].sort((a, b) => Number(b.revenue_impact_usd) - Number(a.revenue_impact_usd)).slice(0, 8)
 
-  // ── Unread badge count — 85 total alerts, decreases as decisions are made
-  const unreadCount = Math.max(0, 85 - Object.values(reviewDecisions).length)
+  // ── Unread badge count
+  const unreadCount = enrichedAlerts.filter((a) => !reviewDecisions[a.alert_id]).length
 
   return (
     <div className="app-shell">
@@ -1477,7 +1476,7 @@ function App() {
           <div className="notif-header">
             <div className="notif-title">
               <Bell size={16} /> <strong>Alert Notifications</strong>
-              <span>85 open · {Object.values(reviewDecisions).filter((d) => d === 'approved').length} deployed · {Object.values(reviewDecisions).filter((d) => d === 'rejected').length} rejected</span>
+              <span>{enrichedAlerts.length} open · {Object.values(reviewDecisions).filter((d) => d === 'approved').length} deployed · {Object.values(reviewDecisions).filter((d) => d === 'rejected').length} rejected</span>
             </div>
             <div className="notif-filters">
               {['All', 'Critical', 'High', 'Medium', 'Warning'].map((f) => (
@@ -1817,11 +1816,11 @@ function App() {
       <main key="health" className="health-shell tab-content">
         <div className="health-summary">
           {[
-            { label: 'Total Active', count: '5,000+', color: '#9EA3B0' },
+            { label: 'Total Campaigns', count: `${Number(kpis.find((k) => k.kpi_name === 'Total Campaigns')?.value ?? 5247).toLocaleString()}+`, color: '#9EA3B0' },
             { label: 'Healthy (≥90%)',  count: campaignHealth.filter((h) => h.deliveryRate >= 90).length, color: '#22c55e' },
             { label: 'At Risk (75–89%)', count: campaignHealth.filter((h) => h.deliveryRate >= 75 && h.deliveryRate < 90).length, color: '#f59e0b' },
             { label: 'Critical (<75%)', count: campaignHealth.filter((h) => h.deliveryRate < 75).length, color: '#ef4444' },
-            { label: 'With Open Alerts', count: 85, color: '#FF5800' },
+            { label: 'With Open Alerts', count: enrichedAlerts.length, color: '#FF5800' },
           ].map((s) => (
             <div className="health-stat" key={s.label}>
               <span className="health-stat-num" style={{ color: s.color }}>{s.count}</span>
