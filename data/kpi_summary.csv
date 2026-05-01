@@ -1,5 +1,7 @@
 kpi_name,value,unit,as_of
-Active Campaigns,620,count,2024-07-15 23:00:00
+Active Campaigns,5247,count,2024-07-15 23:00:00
+Active Campaigns Streaming,2841,count,2024-07-15 23:00:00
+Active Campaigns Linear,2406,count,2024-07-15 23:00:00
 Performance Rows,155520,rows,2024-07-15 23:00:00
 Total Impressions Delivered,2289666894,impressions,2024-07-15 23:00:00
 VAST Fill Rate,95.49,percent,2024-07-15 23:00:00
@@ -8,5 +10,6 @@ Video Completion Rate,74.08,percent,2024-07-15 23:00:00
 Ad Error Rate,1.801,percent,2024-07-15 23:00:00
 Estimated Revenue Delivered,62503656.61,usd,2024-07-15 23:00:00
 Revenue at Risk,3200000,usd,2024-07-15 23:00:00
-Active Campaigns Low Delivery,620,count,2024-07-15 23:00:00
+Active Campaigns Low Delivery,85,count,2024-07-15 23:00:00
+Open Alerts,85,count,2024-07-15 23:00:00
 Total Campaigns,5247,count,2024-07-15 23:00:00
